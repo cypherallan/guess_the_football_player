@@ -123,14 +123,31 @@ class _MatchScreenState extends State<MatchScreen> {
                           color: Colors.green.withOpacity(0.1),
                           borderRadius: BorderRadius.circular(8),
                         ),
-                        child: Text(
-                          isAsker
-                              ? "🔥 YOU ASK THE QUESTIONS"
-                              : "🛡️ YOU ANSWER THE QUESTIONS",
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              isAsker
+                                  ? "🔥 YOU ASK THE QUESTIONS"
+                                  : "🛡️ YOU ANSWER THE QUESTIONS",
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+
+                            const SizedBox(height: 10),
+
+                            Text(
+                              isAsker
+                                  ? "Your score: ${data['score'] ?? 100}"
+                                  : "Player score: ${data['score'] ?? 100}",
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
                         ),
                       )
                     else
@@ -303,6 +320,20 @@ class _MatchScreenState extends State<MatchScreen> {
                                                             EdgeInsets.zero,
                                                       ),
                                                   onPressed: () async {
+                                                    final match = await matchRef
+                                                        .get();
+
+                                                    final currentScore =
+                                                        (match
+                                                            .data()?['score'] ??
+                                                        100);
+
+                                                    await matchRef.update({
+                                                      'score':
+                                                          (currentScore - 10)
+                                                              .clamp(0, 100),
+                                                    });
+
                                                     await messagesRef.add({
                                                       'from': uid,
                                                       'type': 'answer',

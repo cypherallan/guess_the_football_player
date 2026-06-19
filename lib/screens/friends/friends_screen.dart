@@ -96,6 +96,8 @@ class FriendsScreen extends StatelessWidget {
           'player1Ready': false,
           'player2Ready': false,
 
+          'score': 100,
+
           'rolesLocked': false,
           'gameStarted': false,
 
@@ -216,6 +218,7 @@ class FriendsScreen extends StatelessWidget {
                                   .add({
                                     'player1': data['fromUid'],
                                     'player2': uid,
+                                    'score': 100,
                                     'status': 'active',
                                     'createdAt': FieldValue.serverTimestamp(),
                                   });
