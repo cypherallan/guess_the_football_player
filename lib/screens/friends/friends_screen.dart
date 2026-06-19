@@ -92,6 +92,16 @@ class FriendsScreen extends StatelessWidget {
           'player1': fromUid,
           'player2': toUid,
           'status': 'active',
+
+          'player1Ready': false,
+          'player2Ready': false,
+
+          'rolesLocked': false,
+          'gameStarted': false,
+
+          'askerUid': null,
+          'answererUid': null,
+
           'createdAt': FieldValue.serverTimestamp(),
         });
 

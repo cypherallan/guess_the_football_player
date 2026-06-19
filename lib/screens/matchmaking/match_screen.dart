@@ -45,11 +45,25 @@ class _MatchScreenState extends State<MatchScreen> {
 
           final data = doc.data() as Map<String, dynamic>;
 
+          print("UID: $uid");
+          print("ASKER: ${data['askerUid']}");
+          print("ANSWERER: ${data['answererUid']}");
+
           print("MATCH SCREEN OPENED");
           print("MATCH ID: ${widget.matchId}");
           print(data);
 
-          
+          final player1Ready = data['player1Ready'] ?? false;
+          final player2Ready = data['player2Ready'] ?? false;
+          final rolesLocked = data['rolesLocked'] ?? false;
+          final gameStarted = data['gameStarted'] ?? false;
+
+          if (!gameStarted &&
+              player1Ready == true &&
+              player2Ready == true &&
+              rolesLocked == true) {
+            matchRef.update({'gameStarted': true});
+          }
 
           // ================= FRIEND SYNC (RUN ONCE ONLY) =================
           if (!_synced && data['friendsSynced'] != true) {
@@ -77,15 +91,14 @@ class _MatchScreenState extends State<MatchScreen> {
             print("🟢 Friends synced in match screen");
           }
 
-          final player1Ready = data['player1Ready'] ?? false;
-          final player2Ready = data['player2Ready'] ?? false;
-          final rolesLocked = data['rolesLocked'] ?? false;
-
           final askerUid = data['askerUid'];
           final answererUid = data['answererUid'];
 
-          final isAsker = uid == askerUid;
-          final isAnswerer = uid == answererUid;
+          final isAsker = askerUid != null && askerUid.toString() == uid;
+          final isAnswerer =
+              answererUid != null && answererUid.toString() == uid;
+
+          final isLockedIn = data['isLockedIn'] ?? false;
 
           return Column(
             children: [
@@ -94,13 +107,51 @@ class _MatchScreenState extends State<MatchScreen> {
                 child: Column(
                   children: [
                     Text("Player 1: ${data['player1Name'] ?? ''}"),
-                    Text("Ready: $player1Ready"),
-                    const SizedBox(height: 10),
                     Text("Player 2: ${data['player2Name'] ?? ''}"),
+
+                    const SizedBox(height: 10),
+
+                    Text("Ready: $player1Ready"),
                     Text("Ready: $player2Ready"),
+
+                    const SizedBox(height: 10),
+
+                    if (rolesLocked)
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: Colors.green.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          isAsker
+                              ? "🔥 YOU ASK THE QUESTIONS"
+                              : "🛡️ YOU ANSWER THE QUESTIONS",
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      )
+                    else
+                      const Text("Waiting for game to start..."),
                   ],
                 ),
               ),
+
+              if (rolesLocked && isAsker)
+                Padding(
+                  padding: const EdgeInsets.all(10),
+                  child: Text(
+                    isLockedIn == true
+                        ? "✅ Player locked in"
+                        : "⏳ Waiting for opponent to lock in their footballer...",
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
+                ),
 
               const Divider(),
 
@@ -119,10 +170,164 @@ class _MatchScreenState extends State<MatchScreen> {
                       itemBuilder: (context, i) {
                         final msg = docs[i].data() as Map<String, dynamic>;
 
-                        return ListTile(
-                          title: Text(msg['text'] ?? ''),
-                          subtitle: Text(msg['type'] ?? ''),
-                        );
+                        final questionId = docs[i].id;
+
+                        final alreadyAnswered = docs.any((m) {
+                          final d = m.data() as Map<String, dynamic>;
+
+                          return d['type'] == 'answer' &&
+                              d['questionId'] == questionId;
+                        });
+
+                        String? answerGiven;
+
+                        if (alreadyAnswered) {
+                          final answerDoc = docs.firstWhere((m) {
+                            final d = m.data() as Map<String, dynamic>;
+
+                            return d['type'] == 'answer' &&
+                                d['questionId'] == questionId;
+                          });
+
+                          answerGiven =
+                              (answerDoc.data()
+                                  as Map<String, dynamic>)['text'];
+                        }
+
+                        if (msg['type'] == 'question') {
+                          return Card(
+                            margin: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            child: Padding(
+                              padding: const EdgeInsets.all(10),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      msg['text'] ?? '',
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 16,
+                                      ),
+                                    ),
+                                  ),
+
+                                  if (isAsker && alreadyAnswered)
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 10,
+                                        vertical: 5,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: answerGiven == "YES"
+                                            ? Colors.green
+                                            : Colors.red,
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Text(
+                                        answerGiven!,
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+
+                                  if (isAnswerer)
+                                    alreadyAnswered
+                                        ? SizedBox(
+                                            width: 45,
+                                            height: 35,
+                                            child: ElevatedButton(
+                                              onPressed: () {},
+                                              style: ElevatedButton.styleFrom(
+                                                backgroundColor:
+                                                    answerGiven == "YES"
+                                                    ? Colors.green
+                                                    : Colors.red,
+                                              ),
+                                              child: Icon(
+                                                answerGiven == "YES"
+                                                    ? Icons.check
+                                                    : Icons.close,
+                                                color: Colors.white,
+                                                size: 18,
+                                              ),
+                                            ),
+                                          )
+                                        : Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              SizedBox(
+                                                width: 45,
+                                                height: 35,
+                                                child: ElevatedButton(
+                                                  style:
+                                                      ElevatedButton.styleFrom(
+                                                        backgroundColor:
+                                                            Colors.green,
+                                                        padding:
+                                                            EdgeInsets.zero,
+                                                      ),
+                                                  onPressed: () async {
+                                                    await messagesRef.add({
+                                                      'from': uid,
+                                                      'type': 'answer',
+                                                      'questionId': questionId,
+                                                      'text': 'YES',
+                                                      'createdAt':
+                                                          FieldValue.serverTimestamp(),
+                                                    });
+                                                  },
+                                                  child: const Icon(
+                                                    Icons.check,
+                                                    color: Colors.white,
+                                                    size: 18,
+                                                  ),
+                                                ),
+                                              ),
+
+                                              const SizedBox(width: 6),
+
+                                              SizedBox(
+                                                width: 45,
+                                                height: 35,
+                                                child: ElevatedButton(
+                                                  style:
+                                                      ElevatedButton.styleFrom(
+                                                        backgroundColor:
+                                                            Colors.red,
+                                                        padding:
+                                                            EdgeInsets.zero,
+                                                      ),
+                                                  onPressed: () async {
+                                                    await messagesRef.add({
+                                                      'from': uid,
+                                                      'type': 'answer',
+                                                      'questionId': questionId,
+                                                      'text': 'NO',
+                                                      'createdAt':
+                                                          FieldValue.serverTimestamp(),
+                                                    });
+                                                  },
+                                                  child: const Icon(
+                                                    Icons.close,
+                                                    color: Colors.white,
+                                                    size: 18,
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                ],
+                              ),
+                            ),
+                          );
+                        }
+
+                        return const SizedBox.shrink();
                       },
                     );
                   },
@@ -132,7 +337,7 @@ class _MatchScreenState extends State<MatchScreen> {
               const Divider(),
 
               // READY BUTTON
-              if (!rolesLocked)
+              if (!gameStarted && !rolesLocked)
                 ElevatedButton(
                   onPressed: () async {
                     final d =
@@ -147,53 +352,28 @@ class _MatchScreenState extends State<MatchScreen> {
                   child: const Text("READY"),
                 ),
 
-              // ROLE SELECTION
-              if (player1Ready && player2Ready && !rolesLocked)
-                Row(
-                  children: [
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: () async {
-                          final d =
-                              (await matchRef.get()).data()
-                                  as Map<String, dynamic>;
+              if (player1Ready && player2Ready && !gameStarted && !rolesLocked)
+                Center(
+                  child: ElevatedButton(
+                    child: const Text("START MATCH"),
+                    onPressed: () async {
+                      final d =
+                          (await matchRef.get()).data() as Map<String, dynamic>;
 
-                          await matchRef.update({
-                            'rolesLocked': true,
-                            'askerUid': uid,
-                            'answererUid': uid == d['player1']
-                                ? d['player2']
-                                : d['player1'],
-                            'status': 'active',
-                          });
-                        },
-                        child: const Text("ASK QUESTIONS"),
-                      ),
-                    ),
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: () async {
-                          final d =
-                              (await matchRef.get()).data()
-                                  as Map<String, dynamic>;
-
-                          await matchRef.update({
-                            'rolesLocked': true,
-                            'answererUid': uid,
-                            'askerUid': uid == d['player1']
-                                ? d['player2']
-                                : d['player1'],
-                            'status': 'active',
-                          });
-                        },
-                        child: const Text("ANSWER QUESTIONS"),
-                      ),
-                    ),
-                  ],
+                      await matchRef.update({
+                        'rolesLocked': true,
+                        'askerUid': uid,
+                        'answererUid': uid == d['player1']
+                            ? d['player2']
+                            : d['player1'],
+                        'status': 'active',
+                      });
+                    },
+                  ),
                 ),
 
               // ASK
-              if (rolesLocked && isAsker)
+              if (gameStarted && rolesLocked && isAsker)
                 Row(
                   children: [
                     Expanded(
@@ -223,34 +403,33 @@ class _MatchScreenState extends State<MatchScreen> {
                 ),
 
               // ANSWER
-              if (rolesLocked && isAnswerer)
-                Row(
+              if (rolesLocked && isAnswerer && !(isLockedIn == true))
+                Column(
                   children: [
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: () async {
-                          await messagesRef.add({
-                            'from': uid,
-                            'type': 'answer',
-                            'text': "YES",
-                            'createdAt': FieldValue.serverTimestamp(),
-                          });
-                        },
-                        child: const Text("YES"),
+                    const Text("Choose your secret footballer"),
+
+                    Padding(
+                      padding: const EdgeInsets.all(10),
+                      child: TextField(
+                        controller: _controller,
+                        decoration: const InputDecoration(
+                          hintText: "e.g Messi or Lionel Messi",
+                        ),
                       ),
                     ),
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: () async {
-                          await messagesRef.add({
-                            'from': uid,
-                            'type': 'answer',
-                            'text': "NO",
-                            'createdAt': FieldValue.serverTimestamp(),
-                          });
-                        },
-                        child: const Text("NO"),
-                      ),
+
+                    ElevatedButton(
+                      child: const Text("LOCK IN PLAYER"),
+                      onPressed: () async {
+                        if (_controller.text.isEmpty) return;
+
+                        await matchRef.update({
+                          'secretPlayer': _controller.text.trim().toLowerCase(),
+                          'isLockedIn': true,
+                        });
+
+                        _controller.clear();
+                      },
                     ),
                   ],
                 ),
