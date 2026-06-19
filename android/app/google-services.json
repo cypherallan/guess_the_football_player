@@ -1,0 +1,54 @@
+{
+  "project_info": {
+    "project_number": "852476349759",
+    "project_id": "guess-the-footballer-db87f",
+    "storage_bucket": "guess-the-footballer-db87f.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:852476349759:android:bfa92d974d9eca4485178a",
+        "android_client_info": {
+          "package_name": "com.example.guess_the_footballer"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "852476349759-6bqoqa5oqf2lplb9hm11f3ei7krcpc2s.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.guess_the_footballer",
+            "certificate_hash": "bdcaf3098b39bf77b5db6ac20b8a42ef81d0afd4"
+          }
+        },
+        {
+          "client_id": "852476349759-auqj0gequklqf7eoq431nc44r823s32c.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBUW2dMJNxOQT_Mxeo5zoI0sivPjL3KR58"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "852476349759-auqj0gequklqf7eoq431nc44r823s32c.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "852476349759-9r1hp00277n6f5t3aid14amrml64l3ne.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.guessTheFootballer"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
