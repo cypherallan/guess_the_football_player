@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'dart:async';
 
 class MatchScreen extends StatefulWidget {
   final String matchId;
@@ -17,11 +18,72 @@ class _MatchScreenState extends State<MatchScreen> {
 
   bool _synced = false;
 
+  Timer? _askerTimer;
+  Timer? _answererTimer;
+  int _timeLeft = 45;
+  late DocumentReference matchRef;
+
+  String? _lastQuestionId;
+  String? _lastAnswerId;
+
+  void _startTimer({required bool isAsker}) {
+    _askerTimer?.cancel();
+    _answererTimer?.cancel();
+
+    setState(() {
+      _timeLeft = 45;
+    });
+
+    final timer = Timer.periodic(const Duration(seconds: 1), (t) async {
+      setState(() {
+        _timeLeft--;
+      });
+
+      if (_timeLeft <= 0) {
+        t.cancel();
+
+        final match = await FirebaseFirestore.instance
+            .collection('matches')
+            .doc(widget.matchId)
+            .get();
+
+        final data = match.data() as Map<String, dynamic>;
+
+        final askerUid = data['askerUid'];
+        final answererUid = data['answererUid'];
+        final score = data['score'] ?? 100;
+
+        if (isAsker) {
+          // ASKER FAILED → LOSES
+          await matchRef.update({'status': 'finished', 'winner': answererUid});
+        } else {
+          // ANSWERER FAILED → LOSES, ASKER WINS
+          await matchRef.update({
+            'status': 'finished',
+            'winner': askerUid,
+            'score': score,
+          });
+        }
+      }
+    });
+
+    if (isAsker) {
+      _askerTimer = timer;
+    } else {
+      _answererTimer = timer;
+    }
+  }
+
+  void _stopTimers() {
+    _askerTimer?.cancel();
+    _answererTimer?.cancel();
+  }
+
   @override
   Widget build(BuildContext context) {
     final uid = FirebaseAuth.instance.currentUser!.uid;
 
-    final matchRef = FirebaseFirestore.instance
+    matchRef = FirebaseFirestore.instance
         .collection('matches')
         .doc(widget.matchId);
 
@@ -137,6 +199,17 @@ class _MatchScreenState extends State<MatchScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
+                            Text(
+                              "⏱️ $_timeLeft seconds left",
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: _timeLeft <= 10
+                                    ? Colors.red
+                                    : Colors.black,
+                              ),
+                            ),
+
                             Text(
                               isAsker
                                   ? "🔥 YOU ASK THE QUESTIONS"
@@ -254,6 +327,7 @@ class _MatchScreenState extends State<MatchScreen> {
                             onPressed: () async {
                               await matchRef.update({
                                 '${uid}_rematch': 'declined',
+                                'status': 'finished', // 👈 ADD THIS
                               });
                             },
                             child: const Text("NO"),
@@ -290,7 +364,8 @@ class _MatchScreenState extends State<MatchScreen> {
                                 '${uid}_rematch': 'accepted',
                               });
 
-                              // 🔥 IMMEDIATELY RESTART MATCH HERE
+                              final d = await matchRef.get();
+
                               await matchRef.update({
                                 'status': 'active',
                                 'winner': null,
@@ -299,12 +374,11 @@ class _MatchScreenState extends State<MatchScreen> {
                                 'isLockedIn': false,
                                 'score': 100,
 
-                                '${data['player1']}_rematch': null,
-                                '${data['player2']}_rematch': null,
+                                '${d['player1']}_rematch': null,
+                                '${d['player2']}_rematch': null,
 
-                                // switch roles
-                                'askerUid': data['answererUid'],
-                                'answererUid': data['askerUid'],
+                                'askerUid': d['answererUid'],
+                                'answererUid': d['askerUid'],
                               });
                             },
                             child: const Text("YES"),
@@ -316,6 +390,7 @@ class _MatchScreenState extends State<MatchScreen> {
                             onPressed: () async {
                               await matchRef.update({
                                 '${uid}_rematch': 'declined',
+                                'status': 'finished', // 👈 ADD THIS
                               });
                             },
                             child: const Text("NO"),
@@ -379,12 +454,45 @@ class _MatchScreenState extends State<MatchScreen> {
 
                     final docs = snap.data!.docs;
 
+                    // 🔥 BEST PLACE (runs once per stream update)
+                    final latestMessage = docs.isNotEmpty
+                        ? docs.last.data() as Map<String, dynamic>
+                        : null;
+
+                    if (latestMessage != null &&
+                        latestMessage['type'] == 'question') {
+                      if (isAnswerer &&
+                          _lastQuestionId != latestMessage['questionId']) {
+                        _lastQuestionId = latestMessage['questionId'];
+
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          _startTimer(isAsker: false);
+                        });
+                      }
+                    }
+
+                    for (var doc in docs) {
+                      final data = doc.data() as Map<String, dynamic>;
+
+                      // ANSWER ARRIVED → START ASKER TIMER
+                      if (data['type'] == 'answer' &&
+                          data['questionId'] != null) {
+                        if (_lastAnswerId != doc.id && isAsker) {
+                          _lastAnswerId = doc.id;
+
+                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                            _startTimer(isAsker: true);
+                          });
+                        }
+                      }
+                    }
+
                     return ListView.builder(
                       itemCount: docs.length,
                       itemBuilder: (context, i) {
                         final msg = docs[i].data() as Map<String, dynamic>;
 
-                        final questionId = docs[i].id;
+                        final questionId = msg['questionId'] ?? docs[i].id;
 
                         final alreadyAnswered = docs.any((m) {
                           final d = m.data() as Map<String, dynamic>;
@@ -413,12 +521,20 @@ class _MatchScreenState extends State<MatchScreen> {
 
                           final secret = (data['secretPlayer'] ?? '')
                               .toString()
-                              .toLowerCase();
+                              .toLowerCase()
+                              .replaceAll(RegExp(r'[^a-z\s]'), '')
+                              .trim();
+
                           final guessText = (msg['text'] ?? '')
                               .toString()
-                              .toLowerCase();
+                              .toLowerCase()
+                              .replaceAll(RegExp(r'[^a-z\s]'), '')
+                              .trim();
+
                           final isCorrectGuess =
-                              guessText.trim() == secret.trim();
+                              secret == guessText ||
+                              guessText.contains(secret) ||
+                              secret.contains(guessText);
 
                           return Card(
                             color: Colors.orange[100],
@@ -498,6 +614,13 @@ class _MatchScreenState extends State<MatchScreen> {
                         }
 
                         if (msg['type'] == 'question') {
+                          if (isAnswerer && questionId != _lastQuestionId) {
+                            _lastQuestionId = questionId;
+
+                            WidgetsBinding.instance.addPostFrameCallback((_) {
+                              _startTimer(isAsker: false);
+                            });
+                          }
                           return Card(
                             margin: const EdgeInsets.symmetric(
                               horizontal: 8,
@@ -583,6 +706,11 @@ class _MatchScreenState extends State<MatchScreen> {
                                                       'createdAt':
                                                           FieldValue.serverTimestamp(),
                                                     });
+                                                    if (isAsker) {
+                                                      _startTimer(
+                                                        isAsker: true,
+                                                      );
+                                                    }
                                                   },
                                                   child: const Icon(
                                                     Icons.check,
@@ -711,7 +839,13 @@ class _MatchScreenState extends State<MatchScreen> {
                               'createdAt': FieldValue.serverTimestamp(),
                             });
 
+                            await matchRef.update({
+                              'lastQuestionTime': FieldValue.serverTimestamp(),
+                            });
+
                             _controller.clear();
+
+                            _stopTimers(); // 👈 STOP HERE
                           },
                         ),
                       ],
@@ -749,6 +883,8 @@ class _MatchScreenState extends State<MatchScreen> {
                                     onPressed: () async {
                                       if (_guessController.text.isEmpty) return;
 
+                                      _stopTimers(); // 👈 STOP TIMER ON GUESS
+
                                       await messagesRef.add({
                                         'from': uid,
                                         'type': 'guess',
@@ -761,7 +897,6 @@ class _MatchScreenState extends State<MatchScreen> {
                                       });
 
                                       _guessController.clear();
-
                                       Navigator.pop(context);
                                     },
                                     child: const Text("SUBMIT"),
@@ -832,5 +967,12 @@ class _MatchScreenState extends State<MatchScreen> {
         },
       ),
     );
+  }
+
+  @override
+  void dispose() {
+    _askerTimer?.cancel();
+    _answererTimer?.cancel();
+    super.dispose();
   }
 }
