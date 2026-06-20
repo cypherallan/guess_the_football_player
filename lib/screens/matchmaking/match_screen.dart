@@ -13,6 +13,7 @@ class MatchScreen extends StatefulWidget {
 
 class _MatchScreenState extends State<MatchScreen> {
   final TextEditingController _controller = TextEditingController();
+  final TextEditingController _guessController = TextEditingController();
 
   bool _synced = false;
 
@@ -58,10 +59,18 @@ class _MatchScreenState extends State<MatchScreen> {
           final rolesLocked = data['rolesLocked'] ?? false;
           final gameStarted = data['gameStarted'] ?? false;
 
-          if (!gameStarted &&
-              player1Ready == true &&
-              player2Ready == true &&
-              rolesLocked == true) {
+          final score = data['score'] ?? 100;
+          final opponentUid = uid == data['player1']
+              ? data['player2']
+              : data['player1'];
+
+          final myRematch = data['${uid}_rematch'];
+          final opponentRematch = data['${opponentUid}_rematch'];
+          final opponentName = uid == data['player1']
+              ? data['player2Name']
+              : data['player1Name'];
+
+          if (player1Ready && player2Ready && rolesLocked && !gameStarted) {
             matchRef.update({'gameStarted': true});
           }
 
@@ -99,6 +108,8 @@ class _MatchScreenState extends State<MatchScreen> {
               answererUid != null && answererUid.toString() == uid;
 
           final isLockedIn = data['isLockedIn'] ?? false;
+          final winner = data['winner'];
+          final status = data['status'];
 
           return Column(
             children: [
@@ -140,8 +151,8 @@ class _MatchScreenState extends State<MatchScreen> {
 
                             Text(
                               isAsker
-                                  ? "Your score: ${data['score'] ?? 100}"
-                                  : "Player score: ${data['score'] ?? 100}",
+                                  ? "Your score: $score"
+                                  : "Player ${data['player1Name'] ?? ''} score: $score",
                               style: const TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.bold,
@@ -156,7 +167,193 @@ class _MatchScreenState extends State<MatchScreen> {
                 ),
               ),
 
-              if (rolesLocked && isAsker)
+              if (status == 'finished')
+                Container(
+                  width: double.infinity,
+                  margin: const EdgeInsets.all(10),
+                  padding: const EdgeInsets.all(15),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.shade100,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Column(
+                    children: [
+                      if (winner == uid)
+                        const Text(
+                          "🏆 YOU GUESSED THE PLAYER!",
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        )
+                      else
+                        const Text(
+                          "🎯 OPPONENT GUESSED THE PLAYER!",
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+
+                      const SizedBox(height: 10),
+
+                      Text(
+                        "Secret player: ${data['secretPlayer']}",
+                        style: const TextStyle(fontSize: 16),
+                      ),
+
+                      const SizedBox(height: 10),
+
+                      Text(
+                        "Final score: ${data['score']}",
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                ),
+
+              if (status == 'finished')
+                Container(
+                  margin: const EdgeInsets.all(10),
+                  padding: const EdgeInsets.all(15),
+                  decoration: BoxDecoration(
+                    border: Border.all(),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Column(
+                    children: [
+                      const Text(
+                        "Match ended",
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+
+                      const SizedBox(height: 10),
+
+                      const Text("Would you like to play again?"),
+
+                      const SizedBox(height: 15),
+
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          ElevatedButton(
+                            onPressed: () async {
+                              await matchRef.update({
+                                '${uid}_rematch': 'requested',
+                              });
+                            },
+                            child: const Text("YES"),
+                          ),
+
+                          const SizedBox(width: 20),
+
+                          ElevatedButton(
+                            onPressed: () async {
+                              await matchRef.update({
+                                '${uid}_rematch': 'declined',
+                              });
+                            },
+                            child: const Text("NO"),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+
+              if (opponentRematch == 'requested' && myRematch == null)
+                Container(
+                  margin: const EdgeInsets.all(10),
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.green.shade100,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Column(
+                    children: [
+                      Text(
+                        "🎮 $opponentName wants to play again",
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+
+                      const SizedBox(height: 10),
+
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          ElevatedButton(
+                            onPressed: () async {
+                              await matchRef.update({
+                                '${uid}_rematch': 'accepted',
+                              });
+
+                              // 🔥 IMMEDIATELY RESTART MATCH HERE
+                              await matchRef.update({
+                                'status': 'active',
+                                'winner': null,
+                                'winningGuess': null,
+                                'secretPlayer': null,
+                                'isLockedIn': false,
+                                'score': 100,
+
+                                '${data['player1']}_rematch': null,
+                                '${data['player2']}_rematch': null,
+
+                                // switch roles
+                                'askerUid': data['answererUid'],
+                                'answererUid': data['askerUid'],
+                              });
+                            },
+                            child: const Text("YES"),
+                          ),
+
+                          const SizedBox(width: 20),
+
+                          ElevatedButton(
+                            onPressed: () async {
+                              await matchRef.update({
+                                '${uid}_rematch': 'declined',
+                              });
+                            },
+                            child: const Text("NO"),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+
+              if (opponentRematch == 'declined')
+                Container(
+                  margin: const EdgeInsets.all(10),
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.red.shade100,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Column(
+                    children: [
+                      Text(
+                        "❌ $opponentName does not want to play again",
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+
+                      const SizedBox(height: 10),
+
+                      ElevatedButton(
+                        onPressed: () {
+                          Navigator.pop(context);
+                        },
+                        child: const Text("SEARCH NEW OPPONENT"),
+                      ),
+                    ],
+                  ),
+                ),
+
+              if (rolesLocked && isAsker && status != 'finished')
                 Padding(
                   padding: const EdgeInsets.all(10),
                   child: Text(
@@ -209,6 +406,95 @@ class _MatchScreenState extends State<MatchScreen> {
                           answerGiven =
                               (answerDoc.data()
                                   as Map<String, dynamic>)['text'];
+                        }
+
+                        if (msg['type'] == 'guess' && isAnswerer) {
+                          final guessId = docs[i].id;
+
+                          final secret = (data['secretPlayer'] ?? '')
+                              .toString()
+                              .toLowerCase();
+                          final guessText = (msg['text'] ?? '')
+                              .toString()
+                              .toLowerCase();
+                          final isCorrectGuess =
+                              guessText.trim() == secret.trim();
+
+                          return Card(
+                            color: Colors.orange[100],
+                            child: ListTile(
+                              title: Text("Opponent guessed: ${msg['text']}"),
+                              subtitle: const Text("Confirm result"),
+
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  IconButton(
+                                    icon: const Icon(
+                                      Icons.check,
+                                      color: Colors.green,
+                                    ),
+                                    onPressed: isCorrectGuess
+                                        ? () async {
+                                            await matchRef.update({
+                                              'winner': data['askerUid'],
+                                              'winningGuess': guessText,
+                                              'status': 'finished',
+                                            });
+
+                                            await messagesRef.add({
+                                              'type': 'guess_response',
+                                              'guessId': guessId,
+                                              'response': 'confirmed',
+                                              'createdAt':
+                                                  FieldValue.serverTimestamp(),
+                                            });
+                                          }
+                                        : null, // ❌ disabled if wrong
+                                  ),
+
+                                  IconButton(
+                                    icon: const Icon(
+                                      Icons.close,
+                                      color: Colors.red,
+                                    ),
+                                    onPressed: !isCorrectGuess
+                                        ? () async {
+                                            final currentScore =
+                                                data['score'] ?? 100;
+
+                                            await matchRef.update({
+                                              'score': currentScore - 10,
+                                            });
+
+                                            await messagesRef.add({
+                                              'type': 'guess_response',
+                                              'guessId': guessId,
+                                              'response': 'declined',
+                                              'createdAt':
+                                                  FieldValue.serverTimestamp(),
+                                            });
+                                          }
+                                        : null, // ❌ disabled if correct
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        }
+
+                        if (msg['type'] == 'guess_response' && isAsker) {
+                          return Card(
+                            color: Colors.grey.shade200,
+                            child: ListTile(
+                              title: Text("Your guess result"),
+                              subtitle: Text(
+                                msg['response'] == 'confirmed'
+                                    ? "Correct guess 🎉"
+                                    : "❌ Incorrect guess",
+                              ),
+                            ),
+                          );
                         }
 
                         if (msg['type'] == 'question') {
@@ -320,18 +606,12 @@ class _MatchScreenState extends State<MatchScreen> {
                                                             EdgeInsets.zero,
                                                       ),
                                                   onPressed: () async {
-                                                    final match = await matchRef
-                                                        .get();
-
                                                     final currentScore =
-                                                        (match
-                                                            .data()?['score'] ??
-                                                        100);
+                                                        data['score'] ?? 100;
 
                                                     await matchRef.update({
                                                       'score':
-                                                          (currentScore - 10)
-                                                              .clamp(0, 100),
+                                                          currentScore - 10,
                                                     });
 
                                                     await messagesRef.add({
@@ -393,6 +673,7 @@ class _MatchScreenState extends State<MatchScreen> {
 
                       await matchRef.update({
                         'rolesLocked': true,
+                        'gameStarted': true,
                         'askerUid': uid,
                         'answererUid': uid == d['player1']
                             ? d['player2']
@@ -404,37 +685,119 @@ class _MatchScreenState extends State<MatchScreen> {
                 ),
 
               // ASK
-              if (gameStarted && rolesLocked && isAsker)
-                Row(
+              if (rolesLocked && isAsker && status != 'finished')
+                Column(
                   children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _controller,
-                        decoration: const InputDecoration(
-                          hintText: "Ask question...",
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: _controller,
+                            decoration: const InputDecoration(
+                              hintText: "Ask a question...",
+                            ),
+                          ),
                         ),
-                      ),
+
+                        IconButton(
+                          icon: const Icon(Icons.send),
+                          onPressed: () async {
+                            if (_controller.text.isEmpty) return;
+
+                            await messagesRef.add({
+                              'from': uid,
+                              'type': 'question',
+                              'text': _controller.text,
+                              'createdAt': FieldValue.serverTimestamp(),
+                            });
+
+                            _controller.clear();
+                          },
+                        ),
+                      ],
                     ),
-                    IconButton(
-                      icon: const Icon(Icons.send),
-                      onPressed: () async {
-                        if (_controller.text.isEmpty) return;
 
-                        await messagesRef.add({
-                          'from': uid,
-                          'type': 'question',
-                          'text': _controller.text,
-                          'createdAt': FieldValue.serverTimestamp(),
-                        });
+                    const SizedBox(height: 10),
 
-                        _controller.clear();
-                      },
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        child: const Text("GUESS THE PLAYER"),
+                        onPressed: () {
+                          showDialog(
+                            context: context,
+                            builder: (_) {
+                              return AlertDialog(
+                                title: const Text("Guess The Footballer"),
+
+                                content: TextField(
+                                  controller: _guessController,
+                                  decoration: const InputDecoration(
+                                    hintText: "Enter footballer name",
+                                  ),
+                                ),
+
+                                actions: [
+                                  TextButton(
+                                    onPressed: () {
+                                      Navigator.pop(context);
+                                    },
+                                    child: const Text("CANCEL"),
+                                  ),
+
+                                  ElevatedButton(
+                                    onPressed: () async {
+                                      if (_guessController.text.isEmpty) return;
+
+                                      await messagesRef.add({
+                                        'from': uid,
+                                        'type': 'guess',
+                                        'text': _guessController.text
+                                            .trim()
+                                            .toLowerCase(),
+                                        'status': 'pending',
+                                        'createdAt':
+                                            FieldValue.serverTimestamp(),
+                                      });
+
+                                      _guessController.clear();
+
+                                      Navigator.pop(context);
+                                    },
+                                    child: const Text("SUBMIT"),
+                                  ),
+                                ],
+                              );
+                            },
+                          );
+                        },
+                      ),
                     ),
                   ],
                 ),
 
+              if (rolesLocked && isAnswerer)
+                Container(
+                  margin: const EdgeInsets.all(10),
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade100,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    "🛡️ Your locked in player is: ${data['secretPlayer'] ?? 'Not set'}",
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
+                ),
+
               // ANSWER
-              if (rolesLocked && isAnswerer && !(isLockedIn == true))
+              if (rolesLocked &&
+                  isAnswerer &&
+                  !(isLockedIn == true) &&
+                  status != 'finished')
                 Column(
                   children: [
                     const Text("Choose your secret footballer"),
