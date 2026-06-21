@@ -32,6 +32,11 @@ class AuthService {
       }
 
       // ANDROID / MOBILE (v7 API)
+      await GoogleSignIn.instance.initialize(
+        serverClientId:
+            '852476349759-auqj0gequklqf7eoq431nc44r823s32c.apps.googleusercontent.com',
+      );
+
       final GoogleSignInAccount googleUser = await GoogleSignIn.instance
           .authenticate();
 
@@ -42,7 +47,9 @@ class AuthService {
       );
 
       return await _auth.signInWithCredential(credential);
-    } catch (e) {
+    } catch (e, stack) {
+      print('GOOGLE ERROR: $e');
+      print(stack);
       rethrow;
     }
   }

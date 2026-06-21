@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/services/auth_service.dart';
 import '../../core/services/user_service.dart';
-import '../home/home_screen.dart';
+import '../navigation/main_navigation_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -45,7 +45,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (_) => const HomeScreen()),
+          MaterialPageRoute(builder: (_) => const MainNavigationScreen()),
         );
       } else {
         print("❌ Credential is NULL (login cancelled or failed)");
