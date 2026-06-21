@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../../widgets/home/dashboard_header.dart';
 import '../../widgets/home/coin_balance_card.dart';
@@ -17,7 +18,6 @@ class HomeScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
-    final int coins = 1000;
 
     return Scaffold(
       backgroundColor: const Color(0xFF0F172A),
@@ -26,20 +26,31 @@ class HomeScreen extends StatelessWidget {
         title: const Text('Guess The Footballer'),
         centerTitle: true,
         actions: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: Row(
-              children: [
-                const Icon(Icons.monetization_on),
-                const SizedBox(width: 4),
-                Text(
-                  "$coins",
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
-              ],
-            ),
+          StreamBuilder<DocumentSnapshot>(
+            stream: FirebaseFirestore.instance
+                .collection('users')
+                .doc(FirebaseAuth.instance.currentUser!.uid)
+                .snapshots(),
+            builder: (context, snapshot) {
+              final data = snapshot.data?.data() as Map<String, dynamic>?;
+
+              final coins = data?['coins'] ?? 1000;
+
+              return Row(
+                children: [
+                  const Icon(Icons.monetization_on),
+                  const SizedBox(width: 4),
+                  Text(
+                    "$coins",
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ],
+              );
+            },
           ),
+
           IconButton(icon: const Icon(Icons.emoji_events), onPressed: () {}),
+
           IconButton(
             icon: const Icon(Icons.people),
             onPressed: () {
@@ -49,6 +60,7 @@ class HomeScreen extends StatelessWidget {
               );
             },
           ),
+
           Builder(
             builder: (context) => IconButton(
               icon: const Icon(Icons.menu),
@@ -75,33 +87,25 @@ class HomeScreen extends StatelessWidget {
             ListTile(
               leading: const Icon(Icons.person),
               title: const Text("Profile"),
-              onTap: () {
-                Navigator.pop(context);
-              },
+              onTap: () => Navigator.pop(context),
             ),
 
             ListTile(
               leading: const Icon(Icons.settings),
               title: const Text("Settings"),
-              onTap: () {
-                Navigator.pop(context);
-              },
+              onTap: () => Navigator.pop(context),
             ),
 
             ListTile(
               leading: const Icon(Icons.help),
               title: const Text("How to Play"),
-              onTap: () {
-                Navigator.pop(context);
-              },
+              onTap: () => Navigator.pop(context),
             ),
 
             ListTile(
               leading: const Icon(Icons.info),
               title: const Text("About Game"),
-              onTap: () {
-                Navigator.pop(context);
-              },
+              onTap: () => Navigator.pop(context),
             ),
 
             const Divider(),
@@ -124,7 +128,19 @@ class HomeScreen extends StatelessWidget {
 
           const SizedBox(height: 20),
 
-          CoinBalanceCard(coins: coins),
+          StreamBuilder<DocumentSnapshot>(
+            stream: FirebaseFirestore.instance
+                .collection('users')
+                .doc(FirebaseAuth.instance.currentUser!.uid)
+                .snapshots(),
+            builder: (context, snapshot) {
+              final data = snapshot.data?.data() as Map<String, dynamic>?;
+
+              final coins = data?['coins'] ?? 1000;
+
+              return CoinBalanceCard(coins: coins);
+            },
+          ),
 
           const SizedBox(height: 20),
 

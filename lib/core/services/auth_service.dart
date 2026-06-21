@@ -25,6 +25,7 @@ class AuthService {
               'wins': 0,
               'losses': 0,
               'score': 0,
+              'coins': 1000,
               'createdAt': FieldValue.serverTimestamp(),
             }, SetOptions(merge: true));
 

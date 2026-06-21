@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'dart:async';
+import '../../core/services/coin_service.dart';
 
 class MatchScreen extends StatefulWidget {
   final String matchId;
@@ -22,6 +23,9 @@ class _MatchScreenState extends State<MatchScreen> {
   Timer? _answererTimer;
   int _timeLeft = 45;
   late DocumentReference matchRef;
+  bool _coinsAwarded = false;
+  final coinService = CoinService();
+  int _noAnswers = 0;
 
   String? _lastQuestionId;
   String? _lastAnswerId;
@@ -173,6 +177,17 @@ class _MatchScreenState extends State<MatchScreen> {
           final winner = data['winner'];
           final status = data['status'];
 
+          if (status == 'finished' && !_coinsAwarded) {
+            _coinsAwarded = true;
+
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              CoinService().applyMatchCoins(
+                uid: FirebaseAuth.instance.currentUser!.uid,
+                noAnswers: _noAnswers,
+                finalScore: (data['score'] ?? 0),
+              );
+            });
+          }
           return Column(
             children: [
               Padding(
@@ -734,12 +749,13 @@ class _MatchScreenState extends State<MatchScreen> {
                                                             EdgeInsets.zero,
                                                       ),
                                                   onPressed: () async {
-                                                    final currentScore =
-                                                        data['score'] ?? 100;
+                                                    _noAnswers++; // 👈 ADD THIS
 
                                                     await matchRef.update({
                                                       'score':
-                                                          currentScore - 10,
+                                                          (data['score'] ??
+                                                              100) -
+                                                          10,
                                                     });
 
                                                     await messagesRef.add({
@@ -883,7 +899,21 @@ class _MatchScreenState extends State<MatchScreen> {
                                     onPressed: () async {
                                       if (_guessController.text.isEmpty) return;
 
-                                      _stopTimers(); // 👈 STOP TIMER ON GUESS
+                                      _stopTimers();
+
+                                      await FirebaseFirestore.instance
+                                          .collection('users')
+                                          .doc(uid)
+                                          .update({
+                                            'coins': FieldValue.increment(
+                                              score,
+                                            ),
+                                          });
+                                      if (!_coinsAwarded) {
+                                        _coinsAwarded = true;
+                                        await coinService
+                                            .awardCoinsFromFinalScore(score);
+                                      } // 👈 STOP TIMER ON GUESS
 
                                       await messagesRef.add({
                                         'from': uid,

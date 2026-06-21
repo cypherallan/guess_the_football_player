@@ -19,6 +19,7 @@ class UserService {
       'email': user.email,
       'photoUrl': user.photoURL,
       'playerId': playerId,
+      'coins': 1000,
 
       'isOnline': true,
       'lastSeen': FieldValue.serverTimestamp(),
