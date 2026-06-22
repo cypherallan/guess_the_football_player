@@ -18,6 +18,8 @@ class FriendsScreen extends StatelessWidget {
     return FirebaseFirestore.instance
         .collection('challenges')
         .where('toUid', isEqualTo: uid)
+        .where('type', isEqualTo: 'game_challenge')
+        .where('status', isEqualTo: 'pending')
         .snapshots();
   }
 
@@ -27,6 +29,7 @@ class FriendsScreen extends StatelessWidget {
         .collection('challenges')
         .where('fromUid', isEqualTo: uid)
         .where('status', isEqualTo: 'pending')
+        .where('type', isEqualTo: 'game_challenge')
         .snapshots();
   }
 
@@ -35,7 +38,9 @@ class FriendsScreen extends StatelessWidget {
     return FirebaseFirestore.instance
         .collection('challenges')
         .where('fromUid', isEqualTo: uid)
+        .where('type', isEqualTo: 'game_challenge')
         .where('status', isEqualTo: 'accepted')
+        .where('matchId', isNotEqualTo: null)
         .snapshots();
   }
 
@@ -63,17 +68,21 @@ class FriendsScreen extends StatelessWidget {
 
   // ================= SEND CHALLENGE =================
   Future<void> sendChallenge(String otherUid, String name) async {
-    await FirebaseFirestore.instance.collection('challenges').add({
+    final docRef = FirebaseFirestore.instance.collection('challenges').doc();
+
+    await docRef.set({
+      'id': docRef.id,
       'fromUid': uid,
       'fromName': FirebaseAuth.instance.currentUser!.displayName ?? "Player",
       'toUid': otherUid,
       'toName': name,
+
       'status': 'pending',
+      'type': 'game_challenge',
 
-      // 🔥 FIX: IMPORTANT
-      'participants': [uid, otherUid],
-
+      // IMPORTANT: prevents re-trigger loops
       'matchId': null,
+      'acceptedAt': null,
       'createdAt': FieldValue.serverTimestamp(),
     });
   }
@@ -179,12 +188,15 @@ class FriendsScreen extends StatelessWidget {
                       trailing: ElevatedButton(
                         child: const Text("CONTINUE"),
                         onPressed: () {
-                          Navigator.push(
-                            context,
+                          final matchId = data['matchId'];
+
+                          if (matchId == null) return;
+
+                          Navigator.of(context).pushAndRemoveUntil(
                             MaterialPageRoute(
-                              builder: (_) =>
-                                  MatchScreen(matchId: data['matchId']),
+                              builder: (_) => MatchScreen(matchId: matchId),
                             ),
+                            (route) => false,
                           );
                         },
                       ),
@@ -221,15 +233,32 @@ class FriendsScreen extends StatelessWidget {
                           ElevatedButton(
                             child: const Text("ACCEPT"),
                             onPressed: () async {
-                              final matchRef = await FirebaseFirestore.instance
+                              final matchRef = FirebaseFirestore.instance
                                   .collection('matches')
-                                  .add({
-                                    'player1': data['fromUid'],
-                                    'player2': uid,
-                                    'score': 100,
-                                    'status': 'active',
-                                    'createdAt': FieldValue.serverTimestamp(),
-                                  });
+                                  .doc();
+
+                              await matchRef.set({
+                                'player1': data['fromUid'] ?? data['player1'],
+                                'player2': uid,
+                                'player1Name': data['fromName'] ?? '',
+                                'player2Name':
+                                    FirebaseAuth
+                                        .instance
+                                        .currentUser!
+                                        .displayName ??
+                                    'Player',
+
+                                'status': 'active',
+                                'score': 100,
+
+                                'player1Ready': false,
+                                'player2Ready': false,
+
+                                'rolesLocked': false,
+                                'gameStarted': false,
+
+                                'createdAt': FieldValue.serverTimestamp(),
+                              });
 
                               await FirebaseFirestore.instance
                                   .collection('challenges')
@@ -237,6 +266,8 @@ class FriendsScreen extends StatelessWidget {
                                   .update({
                                     'status': 'accepted',
                                     'matchId': matchRef.id,
+                                    'acceptedBy': uid,
+                                    'acceptedAt': FieldValue.serverTimestamp(),
                                   });
 
                               Navigator.push(
