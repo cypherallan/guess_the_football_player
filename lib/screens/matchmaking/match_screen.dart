@@ -45,13 +45,16 @@ class _MatchScreenState extends State<MatchScreen> {
         final answererUid = data['answererUid'];
         final score = data['score'] ?? 100;
 
-        if (isAsker) {
-          await matchRef.update({'status': 'finished', 'winner': answererUid});
-        } else {
+        final current = await matchRef.get();
+        final currentData = current.data() as Map<String, dynamic>;
+
+        if (currentData['status'] != 'finished') {
           await matchRef.update({
             'status': 'finished',
-            'winner': askerUid,
+            'winner': isAsker ? answererUid : askerUid,
             'score': score,
+            'endedByTimeout': true,
+            'endedAt': FieldValue.serverTimestamp(),
           });
         }
       }
@@ -69,6 +72,25 @@ class _MatchScreenState extends State<MatchScreen> {
     _answererTimer?.cancel();
   }
 
+  Future<void> _endMatchOnExit(String uid) async {
+    final snap = await matchRef.get();
+    if (!snap.exists) return;
+
+    final data = snap.data() as Map<String, dynamic>;
+
+    final player1 = data['player1'];
+    final player2 = data['player2'];
+
+    final opponent = uid == player1 ? player2 : player1;
+
+    await matchRef.update({
+      'status': 'finished',
+      'winner': opponent,
+      'exitReason': 'player_left',
+      'endedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final uid = FirebaseAuth.instance.currentUser!.uid;
@@ -77,107 +99,114 @@ class _MatchScreenState extends State<MatchScreen> {
         .doc(widget.matchId);
     final messagesRef = matchRef.collection('messages');
 
-    return Scaffold(
-      appBar: AppBar(title: const Text("Match")),
-      body: StreamBuilder<DocumentSnapshot>(
-        stream: matchRef.snapshots(),
-        builder: (context, snapshot) {
-          if (!snapshot.hasData)
-            return const Center(child: CircularProgressIndicator());
-          final doc = snapshot.data!;
-          if (!doc.exists || doc.data() == null)
-            return const Center(child: Text("Loading match..."));
+    return WillPopScope(
+      onWillPop: () async {
+        await _endMatchOnExit(uid);
+        return false;
+      },
+      child: Scaffold(
+        appBar: AppBar(title: const Text("Match")),
+        body: StreamBuilder<DocumentSnapshot>(
+          stream: matchRef.snapshots(),
+          builder: (context, snapshot) {
+            if (!snapshot.hasData)
+              return const Center(child: CircularProgressIndicator());
+            final doc = snapshot.data!;
+            if (!doc.exists || doc.data() == null)
+              return const Center(child: Text("Loading match..."));
 
-          final data = doc.data() as Map<String, dynamic>;
-          final rolesLocked = data['rolesLocked'] ?? false;
-          final score = data['score'] ?? 100;
-          final askerUid = data['askerUid'];
-          final answererUid = data['answererUid'];
-          final status = data['status'];
+            final data = doc.data() as Map<String, dynamic>;
+            final rolesLocked = data['rolesLocked'] ?? false;
+            final score = data['score'] ?? 100;
+            final askerUid = data['askerUid'];
+            final answererUid = data['answererUid'];
+            final status = data['status'];
 
-          final isAsker = askerUid != null && askerUid.toString() == uid;
-          final isAnswerer =
-              answererUid != null && answererUid.toString() == uid;
+            final isAsker = askerUid != null && askerUid.toString() == uid;
+            final isAnswerer =
+                answererUid != null && answererUid.toString() == uid;
 
-          // Friend sync logic execution loop
-          if (!_synced && data['friendsSynced'] != true) {
-            _synced = true;
+            // Friend sync logic execution loop
+            if (!_synced && data['friendsSynced'] != true) {
+              _synced = true;
 
-            WidgetsBinding.instance.addPostFrameCallback((_) async {
-              final p1 = data['player1'];
-              final p2 = data['player2'];
+              WidgetsBinding.instance.addPostFrameCallback((_) async {
+                final p1 = data['player1'];
+                final p2 = data['player2'];
 
-              await matchRef.update({'friendsSynced': true});
+                await matchRef.update({'friendsSynced': true});
 
-              await FirebaseFirestore.instance
-                  .collection('users')
-                  .doc(p1)
-                  .collection('friends')
-                  .doc(p2)
-                  .set({'uid': p2});
+                await FirebaseFirestore.instance
+                    .collection('users')
+                    .doc(p1)
+                    .collection('friends')
+                    .doc(p2)
+                    .set({'uid': p2});
 
-              await FirebaseFirestore.instance
-                  .collection('users')
-                  .doc(p2)
-                  .collection('friends')
-                  .doc(p1)
-                  .set({'uid': p1});
-            });
-          }
+                await FirebaseFirestore.instance
+                    .collection('users')
+                    .doc(p2)
+                    .collection('friends')
+                    .doc(p1)
+                    .set({'uid': p1});
+              });
+            }
 
-          if (status == 'finished' && !_coinsAwarded) {
-            _coinsAwarded = true;
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              CoinService().applyMatchCoins(
-                uid: FirebaseAuth.instance.currentUser!.uid,
-                noAnswers: _noAnswers,
-                finalScore: (data['score'] ?? 0),
-              );
-            });
-          }
+            if (status == 'finished' && !_coinsAwarded) {
+              _coinsAwarded = true;
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                CoinService().applyMatchCoins(
+                  uid: FirebaseAuth.instance.currentUser!.uid,
+                  noAnswers: _noAnswers,
+                  finalScore: (data['score'] ?? 0),
+                );
+              });
+            }
 
-          return Column(
-            children: [
-              GameStatusCard(
-                data: data,
-                rolesLocked: rolesLocked,
-                timeLeft: _timeLeft,
-                isAsker: isAsker,
-                score: score,
-              ),
-              PostGameCard(matchRef: matchRef, data: data, uid: uid),
-              const Divider(),
-              Expanded(
-                child: MessageStreamView(
-                  messagesRef: messagesRef,
+            return Column(
+              children: [
+                GameStatusCard(
+                  data: data,
+                  rolesLocked: rolesLocked,
+                  timeLeft: _timeLeft,
+                  isAsker: isAsker,
+                  score: score,
+                ),
+                PostGameCard(matchRef: matchRef, data: data, uid: uid),
+                const Divider(),
+                Expanded(
+                  child: MessageStreamView(
+                    messagesRef: messagesRef,
+                    matchRef: matchRef,
+                    data: data,
+                    uid: uid,
+                    isAsker: isAsker,
+                    isAnswerer: isAnswerer,
+                    onTriggerTimer: (askerMode) =>
+                        _startTimer(isAsker: askerMode),
+                    onIncrementNoAnswer: () => _noAnswers++,
+                  ),
+                ),
+                const Divider(),
+                SetupGameView(matchRef: matchRef, data: data, uid: uid),
+                ActiveGameplay(
                   matchRef: matchRef,
+                  messagesRef: messagesRef,
                   data: data,
                   uid: uid,
                   isAsker: isAsker,
                   isAnswerer: isAnswerer,
-                  onTriggerTimer: (askerMode) =>
-                      _startTimer(isAsker: askerMode),
-                  onIncrementNoAnswer: () => _noAnswers++,
+                  score: score,
+                  onStopTimers: _stopTimers,
+                  coinsAwarded: _coinsAwarded,
+                  onMarkCoinsAwarded: () =>
+                      setState(() => _coinsAwarded = true),
+                  coinService: coinService,
                 ),
-              ),
-              const Divider(),
-              SetupGameView(matchRef: matchRef, data: data, uid: uid),
-              ActiveGameplay(
-                matchRef: matchRef,
-                messagesRef: messagesRef,
-                data: data,
-                uid: uid,
-                isAsker: isAsker,
-                isAnswerer: isAnswerer,
-                score: score,
-                onStopTimers: _stopTimers,
-                coinsAwarded: _coinsAwarded,
-                onMarkCoinsAwarded: () => setState(() => _coinsAwarded = true),
-                coinService: coinService,
-              ),
-            ],
-          );
-        },
+              ],
+            );
+          },
+        ),
       ),
     );
   }
