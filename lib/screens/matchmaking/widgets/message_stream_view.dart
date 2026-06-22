@@ -1,7 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
-class MessageStreamView extends StatelessWidget {
+class MessageStreamView extends StatefulWidget {
   final CollectionReference messagesRef;
   final DocumentReference matchRef;
   final Map<String, dynamic> data;
@@ -24,32 +24,55 @@ class MessageStreamView extends StatelessWidget {
   });
 
   @override
+  State<MessageStreamView> createState() => _MessageStreamViewState();
+}
+
+class _MessageStreamViewState extends State<MessageStreamView> {
+  String? _lastProcessedQuestion;
+  String? _lastProcessedAnswer;
+
+  @override
   Widget build(BuildContext context) {
     return StreamBuilder<QuerySnapshot>(
-      stream: messagesRef.orderBy('createdAt').snapshots(),
+      stream: widget.messagesRef.orderBy('createdAt').snapshots(),
       builder: (context, snap) {
-        if (!snap.hasData)
+        if (!snap.hasData) {
           return const Center(child: CircularProgressIndicator());
+        }
 
         final docs = snap.data!.docs;
 
-        // Sync turn processing timers via frame callback side-effects safely
+        // ================= QUESTION TRIGGER (FIXED LOOP) =================
         if (docs.isNotEmpty) {
           final latestMessage = docs.last.data() as Map<String, dynamic>;
-          if (latestMessage['type'] == 'question' && isAnswerer) {
+
+          final qId = latestMessage['questionId'] ?? docs.last.id;
+
+          if (latestMessage['type'] == 'question' &&
+              widget.isAnswerer &&
+              _lastProcessedQuestion != qId) {
+            _lastProcessedQuestion = qId;
+
             WidgetsBinding.instance.addPostFrameCallback(
-              (_) => onTriggerTimer(false),
+              (_) => widget.onTriggerTimer(false),
             );
           }
         }
 
+        // ================= ANSWER TRIGGER (FIXED LOOP) =================
         for (var doc in docs) {
           final mData = doc.data() as Map<String, dynamic>;
+
+          final aId = doc.id;
+
           if (mData['type'] == 'answer' &&
               mData['questionId'] != null &&
-              isAsker) {
+              widget.isAsker &&
+              _lastProcessedAnswer != aId) {
+            _lastProcessedAnswer = aId;
+
             WidgetsBinding.instance.addPostFrameCallback(
-              (_) => onTriggerTimer(true),
+              (_) => widget.onTriggerTimer(true),
             );
           }
         }
@@ -71,22 +94,26 @@ class MessageStreamView extends StatelessWidget {
                 final d = m.data() as Map<String, dynamic>;
                 return d['type'] == 'answer' && d['questionId'] == questionId;
               });
+
               answerGiven = (answerDoc.data() as Map<String, dynamic>)['text'];
             }
 
-            // --- TYPE: GUESS ---
-            if (msg['type'] == 'guess' && isAnswerer) {
+            // ================= GUESS =================
+            if (msg['type'] == 'guess' && widget.isAnswerer) {
               final guessId = docs[i].id;
-              final secret = (data['secretPlayer'] ?? '')
+
+              final secret = (widget.data['secretPlayer'] ?? '')
                   .toString()
                   .toLowerCase()
                   .replaceAll(RegExp(r'[^a-z\s]'), '')
                   .trim();
+
               final guessText = (msg['text'] ?? '')
                   .toString()
                   .toLowerCase()
                   .replaceAll(RegExp(r'[^a-z\s]'), '')
                   .trim();
+
               final isCorrectGuess =
                   secret == guessText ||
                   guessText.contains(secret) ||
@@ -104,12 +131,13 @@ class MessageStreamView extends StatelessWidget {
                         icon: const Icon(Icons.check, color: Colors.green),
                         onPressed: isCorrectGuess
                             ? () async {
-                                await matchRef.update({
-                                  'winner': data['askerUid'],
+                                await widget.matchRef.update({
+                                  'winner': widget.data['askerUid'],
                                   'winningGuess': guessText,
                                   'status': 'finished',
                                 });
-                                await messagesRef.add({
+
+                                await widget.messagesRef.add({
                                   'type': 'guess_response',
                                   'guessId': guessId,
                                   'response': 'confirmed',
@@ -122,11 +150,14 @@ class MessageStreamView extends StatelessWidget {
                         icon: const Icon(Icons.close, color: Colors.red),
                         onPressed: !isCorrectGuess
                             ? () async {
-                                final currentScore = data['score'] ?? 100;
-                                await matchRef.update({
+                                final currentScore =
+                                    widget.data['score'] ?? 100;
+
+                                await widget.matchRef.update({
                                   'score': currentScore - 10,
                                 });
-                                await messagesRef.add({
+
+                                await widget.messagesRef.add({
                                   'type': 'guess_response',
                                   'guessId': guessId,
                                   'response': 'declined',
@@ -141,8 +172,8 @@ class MessageStreamView extends StatelessWidget {
               );
             }
 
-            // --- TYPE: GUESS RESPONSE ---
-            if (msg['type'] == 'guess_response' && isAsker) {
+            // ================= GUESS RESPONSE =================
+            if (msg['type'] == 'guess_response' && widget.isAsker) {
               return Card(
                 color: Colors.grey.shade200,
                 child: ListTile(
@@ -156,7 +187,7 @@ class MessageStreamView extends StatelessWidget {
               );
             }
 
-            // --- TYPE: QUESTION ---
+            // ================= QUESTION =================
             if (msg['type'] == 'question') {
               return Card(
                 margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -173,7 +204,8 @@ class MessageStreamView extends StatelessWidget {
                           ),
                         ),
                       ),
-                      if (isAsker && alreadyAnswered)
+
+                      if (widget.isAsker && alreadyAnswered)
                         Container(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 10,
@@ -193,7 +225,8 @@ class MessageStreamView extends StatelessWidget {
                             ),
                           ),
                         ),
-                      if (isAnswerer)
+
+                      if (widget.isAnswerer)
                         alreadyAnswered
                             ? SizedBox(
                                 width: 45,
@@ -226,8 +259,8 @@ class MessageStreamView extends StatelessWidget {
                                         padding: EdgeInsets.zero,
                                       ),
                                       onPressed: () async {
-                                        await messagesRef.add({
-                                          'from': uid,
+                                        await widget.messagesRef.add({
+                                          'from': widget.uid,
                                           'type': 'answer',
                                           'questionId': questionId,
                                           'text': 'YES',
@@ -242,7 +275,9 @@ class MessageStreamView extends StatelessWidget {
                                       ),
                                     ),
                                   ),
+
                                   const SizedBox(width: 6),
+
                                   SizedBox(
                                     width: 45,
                                     height: 35,
@@ -252,12 +287,16 @@ class MessageStreamView extends StatelessWidget {
                                         padding: EdgeInsets.zero,
                                       ),
                                       onPressed: () async {
-                                        onIncrementNoAnswer();
-                                        await matchRef.update({
-                                          'score': (data['score'] ?? 100) - 10,
+                                        widget.onIncrementNoAnswer();
+
+                                        await widget.matchRef.update({
+                                          'score':
+                                              (widget.data['score'] ?? 100) -
+                                              10,
                                         });
-                                        await messagesRef.add({
-                                          'from': uid,
+
+                                        await widget.messagesRef.add({
+                                          'from': widget.uid,
                                           'type': 'answer',
                                           'questionId': questionId,
                                           'text': 'NO',
