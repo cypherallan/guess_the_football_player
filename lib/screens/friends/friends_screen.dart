@@ -40,7 +40,7 @@ class FriendsScreen extends StatelessWidget {
         .where('fromUid', isEqualTo: uid)
         .where('type', isEqualTo: 'game_challenge')
         .where('status', isEqualTo: 'accepted')
-        .where('matchId', isNotEqualTo: null)
+        .where('matchStatus', isEqualTo: 'active')
         .snapshots();
   }
 
@@ -119,6 +119,7 @@ class FriendsScreen extends StatelessWidget {
     // 2. UPDATE CHALLENGE
     await firestore.collection('challenges').doc(challengeId).update({
       'status': 'accepted',
+      'matchStatus': 'active',
       'matchId': matchRef.id,
     });
 
@@ -265,6 +266,7 @@ class FriendsScreen extends StatelessWidget {
                                   .doc(doc.id)
                                   .update({
                                     'status': 'accepted',
+                                    'matchStatus': 'active',
                                     'matchId': matchRef.id,
                                     'acceptedBy': uid,
                                     'acceptedAt': FieldValue.serverTimestamp(),

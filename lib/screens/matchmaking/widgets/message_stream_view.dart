@@ -43,7 +43,6 @@ class _MessageStreamViewState extends State<MessageStreamView> {
         }
 
         final docs = snap.data!.docs;
-        print("STREAM COUNT = ${docs.length}");
 
         final Map<String, String> answersMap = {};
 
