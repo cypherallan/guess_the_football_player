@@ -57,27 +57,11 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen> {
     _processingAccept = true;
 
     try {
-      print("🔥 ONLINE USER SCREEN ACCEPT PRESSED");
-
       final firestore = FirebaseFirestore.instance;
 
       final challengeRef = firestore.collection('challenges').doc(challengeId);
-      final snap = await challengeRef.get();
 
-      if (!snap.exists) {
-        _processingAccept = false;
-        return;
-      }
-
-      final data = snap.data() as Map<String, dynamic>;
-
-      if (data['status'] != 'pending') {
-        _processingAccept = false;
-        return;
-      }
-
-      // 1. CREATE MATCH
-      final matchRef = await firestore.collection('matches').add({
+      final matchRefFuture = firestore.collection('matches').add({
         'player1': fromUid,
         'player2': uid,
         'player1Name': fromName,
@@ -92,17 +76,15 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen> {
         'createdAt': FieldValue.serverTimestamp(),
       });
 
-      // 2. WAIT FOR WRITE TO COMPLETE
-      await Future.delayed(const Duration(milliseconds: 300));
-
-      // 3. UPDATE CHALLENGE WITH MATCH ID
-      await challengeRef.update({
-        'status': 'accepted',
-        'acceptedBy': uid,
-        'matchId': matchRef.id,
+      // 🚀 NAVIGATE IMMEDIATELY (NO WAIT)
+      matchRefFuture.then((matchRef) {
+        _goToMatch(matchRef.id);
       });
 
-      // 3. ADD FRIENDS
+      // 🚀 BACKGROUND: update challenge (no blocking UI)
+      challengeRef.update({'status': 'accepted', 'acceptedBy': uid});
+
+      // 🚀 BACKGROUND: friends sync
       final batch = firestore.batch();
 
       batch.set(
@@ -123,10 +105,7 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen> {
         {'uid': uid},
       );
 
-      await batch.commit();
-
-      // 4. NAVIGATE
-      _goToMatch(matchRef.id);
+      batch.commit();
     } catch (e) {
       debugPrint("ACCEPT ERROR: $e");
     } finally {

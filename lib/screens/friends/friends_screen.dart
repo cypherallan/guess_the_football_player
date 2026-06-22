@@ -18,7 +18,6 @@ class FriendsScreen extends StatelessWidget {
     return FirebaseFirestore.instance
         .collection('challenges')
         .where('toUid', isEqualTo: uid)
-        .where('status', isEqualTo: 'pending')
         .snapshots();
   }
 
@@ -36,7 +35,6 @@ class FriendsScreen extends StatelessWidget {
     return FirebaseFirestore.instance
         .collection('challenges')
         .where('participants', arrayContains: uid)
-        .where('status', isEqualTo: 'accepted')
         .snapshots();
   }
 
@@ -86,32 +84,35 @@ class FriendsScreen extends StatelessWidget {
     String toUid,
     BuildContext context,
   ) async {
-    final matchRef = await FirebaseFirestore.instance
-        .collection('matches')
-        .add({
-          'player1': fromUid,
-          'player2': toUid,
-          'status': 'active',
+    final firestore = FirebaseFirestore.instance;
 
-          'player1Ready': false,
-          'player2Ready': false,
+    // 1. CREATE MATCH
+    final matchRef = await firestore.collection('matches').add({
+      'player1': fromUid,
+      'player2': toUid,
+      'status': 'active',
 
-          'score': 100,
+      'player1Ready': false,
+      'player2Ready': false,
 
-          'rolesLocked': false,
-          'gameStarted': false,
+      'score': 100,
 
-          'askerUid': null,
-          'answererUid': null,
+      'rolesLocked': false,
+      'gameStarted': false,
 
-          'createdAt': FieldValue.serverTimestamp(),
-        });
+      'askerUid': null,
+      'answererUid': null,
 
-    await FirebaseFirestore.instance
-        .collection('challenges')
-        .doc(challengeId)
-        .update({'status': 'accepted', 'matchId': matchRef.id});
+      'createdAt': FieldValue.serverTimestamp(),
+    });
 
+    // 2. UPDATE CHALLENGE
+    await firestore.collection('challenges').doc(challengeId).update({
+      'status': 'accepted',
+      'matchId': matchRef.id,
+    });
+
+    // 3. NAVIGATE IMMEDIATELY
     Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => MatchScreen(matchId: matchRef.id)),
@@ -132,7 +133,9 @@ class FriendsScreen extends StatelessWidget {
             builder: (context, snapshot) {
               if (!snapshot.hasData) return const SizedBox();
 
-              final docs = snapshot.data!.docs;
+              final rawDocs = snapshot.data!.docs;
+
+              final docs = {for (var d in rawDocs) d.id: d}.values.toList();
               if (docs.isEmpty) return const SizedBox();
 
               return Column(
@@ -157,7 +160,9 @@ class FriendsScreen extends StatelessWidget {
             builder: (context, snapshot) {
               if (!snapshot.hasData) return const SizedBox();
 
-              final docs = snapshot.data!.docs;
+              final rawDocs = snapshot.data!.docs;
+
+              final docs = {for (var d in rawDocs) d.id: d}.values.toList();
               if (docs.isEmpty) return const SizedBox();
 
               return Column(
@@ -194,7 +199,9 @@ class FriendsScreen extends StatelessWidget {
             builder: (context, snapshot) {
               if (!snapshot.hasData) return const SizedBox();
 
-              final docs = snapshot.data!.docs;
+              final rawDocs = snapshot.data!.docs;
+
+              final docs = {for (var d in rawDocs) d.id: d}.values.toList();
               if (docs.isEmpty) return const SizedBox();
 
               return Column(

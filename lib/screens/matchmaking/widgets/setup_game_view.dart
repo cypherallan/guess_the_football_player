@@ -27,12 +27,11 @@ class SetupGameView extends StatelessWidget {
         if (!gameStarted && !rolesLocked)
           ElevatedButton(
             onPressed: () async {
-              final d = (await matchRef.get()).data() as Map<String, dynamic>;
-              if (d['player1'] == uid) {
-                await matchRef.update({'player1Ready': true});
-              } else {
-                await matchRef.update({'player2Ready': true});
-              }
+              final field = data['player1'] == uid
+                  ? 'player1Ready'
+                  : 'player2Ready';
+
+              await matchRef.update({field: true});
             },
             child: const Text("READY"),
           ),
