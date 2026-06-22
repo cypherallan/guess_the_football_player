@@ -8,6 +8,7 @@ import 'widgets/post_game_card.dart';
 import 'widgets/message_stream_view.dart';
 import 'widgets/setup_game_view.dart';
 import 'widgets/active_gameplay.dart';
+import 'package:guess_the_footballer/screens/home/home_screen.dart';
 
 class MatchScreen extends StatefulWidget {
   final String matchId;
@@ -134,7 +135,20 @@ class _MatchScreenState extends State<MatchScreen> {
           leading: IconButton(
             icon: const Icon(Icons.arrow_back),
             // safely passes back control loop to WillPopScope
-            onPressed: () => Navigator.maybePop(context),
+            onPressed: () async {
+              final shouldQuit = await _showQuitConfirmationDialog();
+
+              if (!shouldQuit) return;
+
+              await _exitMatch(uid);
+
+              if (!context.mounted) return;
+
+              Navigator.of(context).pushAndRemoveUntil(
+                MaterialPageRoute(builder: (_) => HomeScreen()),
+                (route) => false,
+              );
+            },
           ),
         ),
         body: StreamBuilder<DocumentSnapshot>(
@@ -202,7 +216,21 @@ class _MatchScreenState extends State<MatchScreen> {
                         ),
                         child: const Text("QUIT"),
                         // safely passes control loop to WillPopScope
-                        onPressed: () => Navigator.maybePop(context),
+                        onPressed: () async {
+                          final shouldQuit =
+                              await _showQuitConfirmationDialog();
+
+                          if (!shouldQuit) return;
+
+                          await _exitMatch(uid);
+
+                          if (!context.mounted) return;
+
+                          Navigator.of(context).pushAndRemoveUntil(
+                            MaterialPageRoute(builder: (_) => HomeScreen()),
+                            (route) => false,
+                          );
+                        },
                       ),
                     ),
                   ),
