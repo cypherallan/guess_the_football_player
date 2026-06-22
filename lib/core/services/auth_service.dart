@@ -56,7 +56,6 @@ class AuthService {
   }
 
   Future<void> signOut() async {
-    await GoogleSignIn.instance.disconnect();
-    await _auth.signOut();
-  }
+  await FirebaseAuth.instance.signOut();
+}
 }

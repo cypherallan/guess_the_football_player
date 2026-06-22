@@ -112,14 +112,6 @@ class _MatchScreenState extends State<MatchScreen> {
 
           final data = doc.data() as Map<String, dynamic>;
 
-          print("UID: $uid");
-          print("ASKER: ${data['askerUid']}");
-          print("ANSWERER: ${data['answererUid']}");
-
-          print("MATCH SCREEN OPENED");
-          print("MATCH ID: ${widget.matchId}");
-          print(data);
-
           final player1Ready = data['player1Ready'] ?? false;
           final player2Ready = data['player2Ready'] ?? false;
           final rolesLocked = data['rolesLocked'] ?? false;

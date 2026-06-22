@@ -2,13 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
-
 import 'providers/game_provider.dart';
 import 'providers/score_provider.dart';
 import 'providers/timer_provider.dart';
 
 import 'screens/auth/auth_wrapper.dart';
-
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 Future<void> main() async {
