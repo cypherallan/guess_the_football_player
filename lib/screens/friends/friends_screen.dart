@@ -34,7 +34,8 @@ class FriendsScreen extends StatelessWidget {
   Stream<QuerySnapshot> acceptedByOthers() {
     return FirebaseFirestore.instance
         .collection('challenges')
-        .where('participants', arrayContains: uid)
+        .where('fromUid', isEqualTo: uid)
+        .where('status', isEqualTo: 'accepted')
         .snapshots();
   }
 

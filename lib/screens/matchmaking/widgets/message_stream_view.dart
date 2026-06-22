@@ -34,46 +34,60 @@ class _MessageStreamViewState extends State<MessageStreamView> {
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<QuerySnapshot>(
-      stream: widget.messagesRef.orderBy('createdAt').snapshots(),
+      stream: widget.messagesRef
+          .orderBy('createdAt', descending: false)
+          .snapshots(includeMetadataChanges: true),
       builder: (context, snap) {
         if (!snap.hasData) {
           return const Center(child: CircularProgressIndicator());
         }
 
         final docs = snap.data!.docs;
+        print("STREAM COUNT = ${docs.length}");
+
+        final Map<String, String> answersMap = {};
+
+        for (final doc in docs) {
+          final data = doc.data() as Map<String, dynamic>;
+
+          if (data['type'] == 'answer' && data['questionId'] != null) {
+            answersMap[data['questionId']] = data['text'];
+          }
+        }
 
         // ================= QUESTION TRIGGER (FIXED LOOP) =================
-        if (docs.isNotEmpty) {
-          final latestMessage = docs.last.data() as Map<String, dynamic>;
+        if (widget.isAnswerer && docs.isNotEmpty) {
+          final lastDoc = docs.last;
+          final latestMessage = lastDoc.data() as Map<String, dynamic>;
 
-          final qId = latestMessage['questionId'] ?? docs.last.id;
+          if (latestMessage['type'] == 'question') {
+            final qId = lastDoc.id;
 
-          if (latestMessage['type'] == 'question' &&
-              widget.isAnswerer &&
-              _lastProcessedQuestion != qId) {
-            _lastProcessedQuestion = qId;
+            if (_lastProcessedQuestion != qId) {
+              _lastProcessedQuestion = qId;
 
-            WidgetsBinding.instance.addPostFrameCallback(
-              (_) => widget.onTriggerTimer(false),
-            );
+              WidgetsBinding.instance.addPostFrameCallback(
+                (_) => widget.onTriggerTimer(false),
+              );
+            }
           }
         }
 
         // ================= ANSWER TRIGGER (FIXED LOOP) =================
-        for (var doc in docs) {
-          final mData = doc.data() as Map<String, dynamic>;
+        if (widget.isAsker && docs.isNotEmpty) {
+          final lastDoc = docs.last;
+          final mData = lastDoc.data() as Map<String, dynamic>;
 
-          final aId = doc.id;
+          if (mData['type'] == 'answer') {
+            final aId = lastDoc.id;
 
-          if (mData['type'] == 'answer' &&
-              mData['questionId'] != null &&
-              widget.isAsker &&
-              _lastProcessedAnswer != aId) {
-            _lastProcessedAnswer = aId;
+            if (_lastProcessedAnswer != aId) {
+              _lastProcessedAnswer = aId;
 
-            WidgetsBinding.instance.addPostFrameCallback(
-              (_) => widget.onTriggerTimer(true),
-            );
+              WidgetsBinding.instance.addPostFrameCallback(
+                (_) => widget.onTriggerTimer(true),
+              );
+            }
           }
         }
 
@@ -83,20 +97,9 @@ class _MessageStreamViewState extends State<MessageStreamView> {
             final msg = docs[i].data() as Map<String, dynamic>;
             final questionId = msg['questionId'] ?? docs[i].id;
 
-            final alreadyAnswered = docs.any((m) {
-              final d = m.data() as Map<String, dynamic>;
-              return d['type'] == 'answer' && d['questionId'] == questionId;
-            });
-
-            String? answerGiven;
-            if (alreadyAnswered) {
-              final answerDoc = docs.firstWhere((m) {
-                final d = m.data() as Map<String, dynamic>;
-                return d['type'] == 'answer' && d['questionId'] == questionId;
-              });
-
-              answerGiven = (answerDoc.data() as Map<String, dynamic>)['text'];
-            }
+            //CULPRIT
+            final answerGiven = answersMap[questionId];
+            final alreadyAnswered = answerGiven != null;
 
             // ================= GUESS =================
             if (msg['type'] == 'guess' && widget.isAnswerer) {
@@ -218,7 +221,7 @@ class _MessageStreamViewState extends State<MessageStreamView> {
                             borderRadius: BorderRadius.circular(6),
                           ),
                           child: Text(
-                            answerGiven!,
+                            answerGiven,
                             style: const TextStyle(
                               color: Colors.white,
                               fontWeight: FontWeight.bold,
@@ -258,7 +261,9 @@ class _MessageStreamViewState extends State<MessageStreamView> {
                                         backgroundColor: Colors.green,
                                         padding: EdgeInsets.zero,
                                       ),
+
                                       onPressed: () async {
+                                        print("YES pressed ${DateTime.now()}");
                                         await widget.messagesRef.add({
                                           'from': widget.uid,
                                           'type': 'answer',
@@ -294,6 +299,7 @@ class _MessageStreamViewState extends State<MessageStreamView> {
                                               (widget.data['score'] ?? 100) -
                                               10,
                                         });
+                                        print("NO pressed ${DateTime.now()}");
 
                                         await widget.messagesRef.add({
                                           'from': widget.uid,

@@ -89,10 +89,7 @@ class _MatchScreenState extends State<MatchScreen> {
             return const Center(child: Text("Loading match..."));
 
           final data = doc.data() as Map<String, dynamic>;
-          final player1Ready = data['player1Ready'] ?? false;
-          final player2Ready = data['player2Ready'] ?? false;
           final rolesLocked = data['rolesLocked'] ?? false;
-          final gameStarted = data['gameStarted'] ?? false;
           final score = data['score'] ?? 100;
           final askerUid = data['askerUid'];
           final answererUid = data['answererUid'];
@@ -102,28 +99,30 @@ class _MatchScreenState extends State<MatchScreen> {
           final isAnswerer =
               answererUid != null && answererUid.toString() == uid;
 
-          if (player1Ready && player2Ready && rolesLocked && !gameStarted) {
-            matchRef.update({'gameStarted': true});
-          }
-
           // Friend sync logic execution loop
           if (!_synced && data['friendsSynced'] != true) {
             _synced = true;
-            matchRef.update({'friendsSynced': true});
-            final p1 = data['player1'];
-            final p2 = data['player2'];
-            FirebaseFirestore.instance
-                .collection('users')
-                .doc(p1)
-                .collection('friends')
-                .doc(p2)
-                .set({'uid': p2});
-            FirebaseFirestore.instance
-                .collection('users')
-                .doc(p2)
-                .collection('friends')
-                .doc(p1)
-                .set({'uid': p1});
+
+            WidgetsBinding.instance.addPostFrameCallback((_) async {
+              final p1 = data['player1'];
+              final p2 = data['player2'];
+
+              await matchRef.update({'friendsSynced': true});
+
+              await FirebaseFirestore.instance
+                  .collection('users')
+                  .doc(p1)
+                  .collection('friends')
+                  .doc(p2)
+                  .set({'uid': p2});
+
+              await FirebaseFirestore.instance
+                  .collection('users')
+                  .doc(p2)
+                  .collection('friends')
+                  .doc(p1)
+                  .set({'uid': p1});
+            });
           }
 
           if (status == 'finished' && !_coinsAwarded) {
