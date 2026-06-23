@@ -261,8 +261,11 @@ class _MessageStreamViewState extends State<MessageStreamView> {
                                         padding: EdgeInsets.zero,
                                       ),
 
+                                      // Change this block inside your YES button onPressed:
                                       onPressed: () async {
                                         print("YES pressed ${DateTime.now()}");
+
+                                        // 1. Add the answer message
                                         await widget.messagesRef.add({
                                           'from': widget.uid,
                                           'type': 'answer',
@@ -270,6 +273,11 @@ class _MessageStreamViewState extends State<MessageStreamView> {
                                           'text': 'YES',
                                           'createdAt':
                                               FieldValue.serverTimestamp(),
+                                        });
+
+                                        // 2. Add this update right here to hand the turn back to the Asker!
+                                        await widget.matchRef.update({
+                                          'turn': 'asker',
                                         });
                                       },
                                       child: const Icon(
@@ -290,14 +298,18 @@ class _MessageStreamViewState extends State<MessageStreamView> {
                                         backgroundColor: Colors.red,
                                         padding: EdgeInsets.zero,
                                       ),
+                                      // Change this block inside your NO button onPressed:
                                       onPressed: () async {
                                         widget.onIncrementNoAnswer();
 
+                                        // Update the score AND switch the turn back to the asker
                                         await widget.matchRef.update({
                                           'score':
                                               (widget.data['score'] ?? 100) -
                                               10,
+                                          'turn': 'asker', // Added here!
                                         });
+
                                         print("NO pressed ${DateTime.now()}");
 
                                         await widget.messagesRef.add({

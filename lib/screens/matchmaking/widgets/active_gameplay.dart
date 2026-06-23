@@ -98,6 +98,10 @@ class _ActiveGameplayState extends State<ActiveGameplay> {
     final status = widget.data['status'];
     final isLockedIn = widget.data['isLockedIn'] ?? false;
 
+    // Default to 'asker' if turn isn't set yet.
+    // This ensures that as soon as the player is locked in, it's the asker's turn.
+    final currentTurn = widget.data['turn'] ?? 'asker';
+
     if (!rolesLocked || status == 'finished') return const SizedBox.shrink();
 
     return Column(
@@ -106,9 +110,11 @@ class _ActiveGameplayState extends State<ActiveGameplay> {
           Padding(
             padding: const EdgeInsets.all(10),
             child: Text(
-              isLockedIn == true
-                  ? "✅ Player locked in"
-                  : "⏳ Waiting for opponent to lock in their footballer...",
+              !isLockedIn
+                  ? "⏳ Waiting for opponent to lock in their footballer..."
+                  : (currentTurn == 'asker'
+                        ? "🤔 Your Turn! Ask a question."
+                        : "⏳ Waiting for opponent's response..."),
               style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
             ),
           ),
@@ -117,27 +123,44 @@ class _ActiveGameplayState extends State<ActiveGameplay> {
               Expanded(
                 child: TextField(
                   controller: _controller,
-                  decoration: const InputDecoration(
-                    hintText: "Ask a question...",
+                  // --- FIX 1: Only enable when locked in AND it's the Asker's turn ---
+                  enabled: isLockedIn && currentTurn == 'asker',
+                  decoration: InputDecoration(
+                    hintText: !isLockedIn
+                        ? "Locked until opponent chooses player..."
+                        : (currentTurn == 'asker'
+                              ? "Ask a question..."
+                              : "Waiting for answer..."),
                   ),
                 ),
               ),
               IconButton(
-                icon: const Icon(Icons.send),
-                onPressed: () async {
-                  if (_controller.text.isEmpty) return;
-                  await widget.messagesRef.add({
-                    'from': widget.uid,
-                    'type': 'question',
-                    'text': _controller.text,
-                    'createdAt': FieldValue.serverTimestamp(),
-                  });
-                  await widget.matchRef.update({
-                    'lastQuestionTime': FieldValue.serverTimestamp(),
-                  });
-                  _controller.clear();
-                  widget.onStopTimers();
-                },
+                // --- FIX 2: Disable send button icon interaction when it's not your turn ---
+                icon: Icon(
+                  Icons.send,
+                  color: (isLockedIn && currentTurn == 'asker')
+                      ? Colors.blue
+                      : Colors.grey,
+                ),
+                onPressed: (isLockedIn && currentTurn == 'asker')
+                    ? () async {
+                        if (_controller.text.isEmpty) return;
+                        await widget.messagesRef.add({
+                          'from': widget.uid,
+                          'type': 'question',
+                          'text': _controller.text,
+                          'createdAt': FieldValue.serverTimestamp(),
+                        });
+
+                        // --- FIX 3: Shift the turn to the answerer ---
+                        await widget.matchRef.update({
+                          'lastQuestionTime': FieldValue.serverTimestamp(),
+                          'turn': 'answerer',
+                        });
+                        _controller.clear();
+                        widget.onStopTimers();
+                      }
+                    : null, // Passing null completely disables the button press interaction
               ),
             ],
           ),
@@ -145,7 +168,8 @@ class _ActiveGameplayState extends State<ActiveGameplay> {
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(
-              onPressed: _showGuessDialog,
+              // --- FIX 4: Only allow guesses after a player is locked in ---
+              onPressed: isLockedIn ? _showGuessDialog : null,
               child: const Text("GUESS THE PLAYER"),
             ),
           ),
@@ -180,6 +204,8 @@ class _ActiveGameplayState extends State<ActiveGameplay> {
                 await widget.matchRef.update({
                   'secretPlayer': _controller.text.trim().toLowerCase(),
                   'isLockedIn': true,
+                  'turn':
+                      'asker', // Explicitly hands over the very first turn to Asker here
                 });
                 _controller.clear();
               },
