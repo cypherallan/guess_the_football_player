@@ -23,15 +23,54 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen> {
   }
 
   // ===================== SEND INVITE =====================
+  // ===================== SEND INVITE =====================
   Future<void> sendInvite(String opponentId, String opponentName) async {
-    await FirebaseFirestore.instance.collection('challenges').add({
-      'fromUid': uid,
-      'fromName': FirebaseAuth.instance.currentUser!.displayName ?? "Player",
-      'toUid': opponentId,
-      'toName': opponentName,
-      'status': 'pending',
-      'createdAt': FieldValue.serverTimestamp(),
-    });
+    try {
+      final firestore = FirebaseFirestore.instance;
+
+      // 1. Create a live match lobby room document first
+      final matchRef = await firestore.collection('matches').add({
+        'player1': uid,
+        'player2': null, // Remains null until they click accept!
+        'player1Name':
+            FirebaseAuth.instance.currentUser!.displayName ?? "Player",
+        'player2Name': opponentName,
+        'status': 'searching', // Waiting state
+        'currentTurn': uid,
+        'player1Ready': false,
+        'player2Ready': false,
+        'rolesLocked': false,
+        'friendsSynced': true,
+        'createdAt': FieldValue.serverTimestamp(),
+        'stakePerPlayer': 50, // Default stake or pass dynamic coins here
+        'bountyPool': 100,
+      });
+
+      // 2. Broadcast the challenge tracking card with the matchId attached
+      await firestore.collection('challenges').add({
+        'fromUid': uid,
+        'fromName': FirebaseAuth.instance.currentUser!.displayName ?? "Player",
+        'toUid': opponentId,
+        'toName': opponentName,
+        'status': 'pending',
+        'type':
+            'game_challenge', // Matches the tracking filters we built earlier
+        'matchId': matchRef.id, // Essential linkage!
+        'createdAt': FieldValue.serverTimestamp(),
+        'level': 'Normal', // Default parameters
+        'stakePerPlayer': 50,
+      });
+
+      // 3. Automatically drop the sender straight into their waiting screen lobby
+      if (mounted) {
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => MatchScreen(matchId: matchRef.id)),
+          (route) => false,
+        );
+      }
+    } catch (e) {
+      debugPrint("ERROR SENDING DIRECT INVITE: $e");
+    }
   }
 
   // ===================== NAVIGATE SAFELY =====================

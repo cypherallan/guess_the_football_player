@@ -147,8 +147,6 @@ class HomeScreen extends StatelessWidget {
             },
           ),
           IconButton(icon: const Icon(Icons.emoji_events), onPressed: () {}),
-
-          // 🟢 YOUR OLD ICONBUTTON IS NOW REPLACED BY THIS STREAMBUILDER:
           StreamBuilder<QuerySnapshot>(
             stream: FirebaseFirestore.instance
                 .collection('users')
@@ -196,7 +194,6 @@ class HomeScreen extends StatelessWidget {
               );
             },
           ),
-
           Builder(
             builder: (context) => IconButton(
               icon: const Icon(Icons.menu),
@@ -249,8 +246,15 @@ class HomeScreen extends StatelessWidget {
           ],
         ),
       ),
+      // 🟢 FIX: We use AlwaysScrollableScrollPhysics to force scrolling capability even on short screens
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(
+          16,
+          16,
+          16,
+          40,
+        ), // Added bottom padding so content isn't clipped
         children: [
           DashboardHeader(user: user),
           const SizedBox(height: 20),
@@ -282,6 +286,8 @@ class HomeScreen extends StatelessWidget {
             height: 160,
             child: ListView(
               scrollDirection: Axis.horizontal,
+              // 🟢 FIX: Added bouncing physics to the horizontal cards so they don't fight the vertical scroll container
+              physics: const BouncingScrollPhysics(),
               children: [
                 GameMenuCard(
                   title: "New Game",
@@ -302,10 +308,8 @@ class HomeScreen extends StatelessWidget {
                                 leading: const Icon(Icons.person),
                                 title: const Text("Play 1 vs 1 (Online)"),
                                 onTap: () {
-                                  Navigator.pop(context); // Close main sheet
-                                  _showLevelSelectionBottomSheet(
-                                    context,
-                                  ); // Open levels selection panel!
+                                  Navigator.pop(context);
+                                  _showLevelSelectionBottomSheet(context);
                                 },
                               ),
                               ListTile(
@@ -352,7 +356,6 @@ class HomeScreen extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(height: 25),
         ],
       ),
     );
