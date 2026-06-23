@@ -9,6 +9,9 @@ class FriendsScreen extends StatelessWidget {
 
   final uid = FirebaseAuth.instance.currentUser!.uid;
 
+  // FIX: Capture the exact time this screen session started
+  final DateTime sessionStartTime = DateTime.now();
+
   // ================= USERS =================
   Stream<QuerySnapshot> getUsers() {
     return FirebaseFirestore.instance.collection('users').snapshots();
@@ -33,7 +36,7 @@ class FriendsScreen extends StatelessWidget {
         .snapshots();
   }
 
-  // ================= ACCEPTED (FIXED) =================
+  // ================= ACCEPTED (FIXED WITH TIMESTAMP) =================
   Stream<QuerySnapshot> acceptedByOthers() {
     return FirebaseFirestore.instance
         .collection('challenges')
@@ -41,6 +44,11 @@ class FriendsScreen extends StatelessWidget {
         .where('type', isEqualTo: 'game_challenge')
         .where('status', isEqualTo: 'accepted')
         .where('matchStatus', isEqualTo: 'active')
+        // FIX: Only show challenges sent during this screen session
+        .where(
+          'createdAt',
+          isGreaterThanOrEqualTo: Timestamp.fromDate(sessionStartTime),
+        )
         .snapshots();
   }
 

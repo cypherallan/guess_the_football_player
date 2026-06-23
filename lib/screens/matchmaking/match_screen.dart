@@ -50,13 +50,17 @@ class _MatchScreenState extends State<MatchScreen> {
         final currentData = current.data() as Map<String, dynamic>;
 
         if (currentData['status'] != 'finished') {
-          await matchRef.update({
-            'status': 'finished',
-            'winner': isAsker ? answererUid : askerUid,
-            'score': score,
-            'endedByTimeout': true,
-            'endedAt': FieldValue.serverTimestamp(),
-          });
+          // Replace the old matchRef.update(...) with:
+          await _endMatchInFirestore(
+            matchId: widget.matchId,
+            updateData: {
+              'status': 'finished',
+              'winner': isAsker ? answererUid : askerUid,
+              'score': score,
+              'endedByTimeout': true,
+              'endedAt': FieldValue.serverTimestamp(),
+            },
+          );
         }
       }
     });
@@ -82,12 +86,37 @@ class _MatchScreenState extends State<MatchScreen> {
     final player2 = data['player2'];
     final opponent = uid == player1 ? player2 : player1;
 
-    await matchRef.update({
-      'status': 'finished',
-      'winner': opponent,
-      'exitReason': 'player_left',
-      'endedAt': FieldValue.serverTimestamp(),
-    });
+    // Replace the old matchRef.update(...) with:
+    await _endMatchInFirestore(
+      matchId: widget.matchId,
+      updateData: {
+        'status': 'finished',
+        'winner': opponent,
+        'exitReason': 'player_left',
+        'endedAt': FieldValue.serverTimestamp(),
+      },
+    );
+  }
+
+  Future<void> _endMatchInFirestore({
+    required String matchId,
+    required Map<String, dynamic> updateData,
+  }) async {
+    // 1. Update the match document
+    await matchRef.update(updateData);
+
+    // 2. Update the parent challenge document to remove it from the FriendsScreen lists
+    final challengeSnap = await FirebaseFirestore.instance
+        .collection('challenges')
+        .where('matchId', isEqualTo: matchId)
+        .get();
+
+    for (var doc in challengeSnap.docs) {
+      await doc.reference.update({
+        'matchStatus': 'finished',
+        'status': 'completed',
+      });
+    }
   }
 
   // Visual demonstration of dialog structure requested by user preferences
