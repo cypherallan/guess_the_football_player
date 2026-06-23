@@ -235,14 +235,57 @@ class _MatchScreenState extends State<MatchScreen> {
               });
             }
 
+            //  NEW CODE - PASTE THIS EXACTLY:
             if (status == 'finished' && !_coinsAwarded) {
               _coinsAwarded = true;
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                CoinService().applyMatchCoins(
-                  uid: FirebaseAuth.instance.currentUser!.uid,
-                  noAnswers: _noAnswers,
-                  finalScore: (data['score'] ?? 0),
-                );
+              WidgetsBinding.instance.addPostFrameCallback((_) async {
+                final finalScore = (data['score'] ?? 100) as int;
+                int coinsChange = 0;
+
+                // SCENARIO A: Normal Timeout or Correct Guess finish
+                if (exitReason != 'player_left') {
+                  if (isAsker) {
+                    // Asker logic: Final Score awarded MINUS 10 coins for every "NO" answer received
+                    final noAnswersPenalty = _noAnswers * 10;
+                    coinsChange = finalScore - noAnswersPenalty;
+                  } else if (isAnswerer) {
+                    // Answerer logic: Gets 50 coins ONLY if the Asker drops down to 0 points
+                    if (finalScore <= 0) {
+                      coinsChange = 50;
+                    }
+                  }
+                }
+                // SCENARIO B: A Player Quit the Game
+                else {
+                  final winnerUid = data['winner'];
+                  final isIWinner = (winnerUid == uid);
+
+                  if (isIWinner) {
+                    // The one who DID NOT quit:
+                    if (finalScore > 0) {
+                      // If match had a score, award that score as coins
+                      coinsChange = finalScore;
+                    } else {
+                      // If match was at 0 points, award 50 coins
+                      coinsChange = 50;
+                    }
+                  } else {
+                    // The one WHO QUIT the game:
+                    if (finalScore <= 0) {
+                      // If they quit at 0 points, deduct 50 coins (-50)
+                      coinsChange = -50;
+                    }
+                    // (Note: If they quit while score > 0, they get 0 coin change)
+                  }
+                }
+
+                // Only hit the database if there's an actual addition or deduction to perform
+                if (coinsChange != 0) {
+                  await FirebaseFirestore.instance
+                      .collection('users')
+                      .doc(uid)
+                      .update({'coins': FieldValue.increment(coinsChange)});
+                }
               });
             }
 

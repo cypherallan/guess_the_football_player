@@ -64,16 +64,6 @@ class _ActiveGameplayState extends State<ActiveGameplay> {
               if (_guessController.text.isEmpty) return;
               widget.onStopTimers();
 
-              await FirebaseFirestore.instance
-                  .collection('users')
-                  .doc(widget.uid)
-                  .update({'coins': FieldValue.increment(widget.score)});
-
-              if (!widget.coinsAwarded) {
-                widget.onMarkCoinsAwarded();
-                await widget.coinService.awardCoinsFromFinalScore(widget.score);
-              }
-
               await widget.messagesRef.add({
                 'from': widget.uid,
                 'type': 'guess',
