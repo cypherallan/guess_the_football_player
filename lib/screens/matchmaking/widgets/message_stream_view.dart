@@ -301,17 +301,13 @@ class _MessageStreamViewState extends State<MessageStreamView> {
                                         padding: EdgeInsets.zero,
                                       ),
                                       // Change this block inside your NO button onPressed:
+                                      // Inside message_stream_view.dart -> NO Button onPressed:
                                       onPressed: () async {
                                         widget.onStopTimers();
-                                        widget.onIncrementNoAnswer();
+                                        widget
+                                            .onIncrementNoAnswer(); // Keep this purely for UI stat tracking if you like
 
-                                        // Update the score AND switch the turn back to the asker
-                                        await widget.matchRef.update({
-                                          'score':
-                                              (widget.data['score'] ?? 100) -
-                                              10,
-                                          'turn': 'asker', // Added here!
-                                        });
+                                        // REMOVED the score -10 update block from here!
 
                                         print("NO pressed ${DateTime.now()}");
 
@@ -322,6 +318,10 @@ class _MessageStreamViewState extends State<MessageStreamView> {
                                           'text': 'NO',
                                           'createdAt':
                                               FieldValue.serverTimestamp(),
+                                        });
+
+                                        await widget.matchRef.update({
+                                          'turn': 'asker',
                                         });
                                       },
                                       child: const Icon(

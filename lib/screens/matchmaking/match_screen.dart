@@ -239,46 +239,43 @@ class _MatchScreenState extends State<MatchScreen> {
             if (status == 'finished' && !_coinsAwarded) {
               _coinsAwarded = true;
               WidgetsBinding.instance.addPostFrameCallback((_) async {
-                // --- FIX: Fetch the absolute freshest document copy to ensure the score is updated ---
                 final freshSnap = await matchRef.get();
                 if (!freshSnap.exists) return;
                 final freshData = freshSnap.data() as Map<String, dynamic>;
 
-                final finalScore = (freshData['score'] ?? 100) as int;
+                final endedByTimeout = freshData['endedByTimeout'] ?? false;
+                final exitReason = freshData['exitReason'];
+                final winnerUid = freshData['winner'];
+                final poolAmount = (freshData['bountyPool'] ?? 100) as int;
+
                 int coinsChange = 0;
 
-                // SCENARIO A: Normal Timeout or Correct Guess finish
-                if (exitReason != 'player_left') {
-                  if (isAsker) {
-                    // Asker logic: You get your final score added, MINUS 10 coins for every "NO" answer received
-                    final noAnswersPenalty = _noAnswers * 10;
-                    coinsChange = finalScore - noAnswersPenalty;
-                  } else if (isAnswerer) {
-                    // Answerer logic: Gets 50 coins ONLY if the Asker drops down to 0 points
-                    if (finalScore <= 0) {
-                      coinsChange = 50;
-                    }
-                  }
-                }
-                // SCENARIO B: A Player Quit the Game
-                else {
-                  final winnerUid = freshData['winner'];
-                  final isIWinner = (winnerUid == uid);
+                // SCENARIO A: Bad Ending (Timeout or Rage Quit)
+                // Inside Scenario A (Bad Ending) inside match_screen.dart:
+                if (endedByTimeout || exitReason == 'player_left') {
+                  final int stakePerPlayer =
+                      (freshData['stakePerPlayer'] ?? 50) as int;
 
-                  if (isIWinner) {
-                    if (finalScore > 0) {
-                      coinsChange = finalScore;
-                    } else {
-                      coinsChange = 50;
-                    }
+                  if (winnerUid == uid) {
+                    // Innocent player gets their entry fee back + the penalty payout
+                    coinsChange = stakePerPlayer + (stakePerPlayer * 2);
                   } else {
-                    if (finalScore <= 0) {
-                      coinsChange = -50;
-                    }
+                    // The rule-breaker loses twice their single stake from their main wallet
+                    coinsChange = -(stakePerPlayer * 2);
+                  }
+                }
+                // SCENARIO B: Clean Ending (A correct guess or normal game resolution)
+                else {
+                  if (winnerUid == uid) {
+                    // The winner takes the entire locked 100-coin stakes pool
+                    coinsChange = poolAmount;
+                  } else {
+                    // The loser gets 0 coin change (their 50 coin entry fee remains lost)
+                    coinsChange = 0;
                   }
                 }
 
-                // Apply the exact final math calculation directly to the user's account
+                // Apply the clean transaction directly to the user profile
                 if (coinsChange != 0) {
                   await FirebaseFirestore.instance
                       .collection('users')

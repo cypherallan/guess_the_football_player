@@ -102,18 +102,43 @@ class SetupGameView extends StatelessWidget {
                       letterSpacing: 1.2,
                     ),
                   ),
+                  // Inside setup_game_view.dart -> START MATCH ElevatedButton:
+                  // Inside setup_game_view.dart -> START MATCH ElevatedButton
                   onPressed: () async {
                     final d =
                         (await matchRef.get()).data() as Map<String, dynamic>;
+                    final p1Uid = d['player1'];
+                    final p2Uid = d['player2'];
+
+                    // 1. Fetch the dynamically assigned level configuration fields from the document
+                    final int stakePerPlayer = d['stakePerPlayer'] ?? 50;
+                    final int totalPool = d['bountyPool'] ?? 100;
+
+                    // 2. Deduct the dynamic stake amount from Player 1's wallet
+                    await FirebaseFirestore.instance
+                        .collection('users')
+                        .doc(p1Uid)
+                        .update({
+                          'coins': FieldValue.increment(-stakePerPlayer),
+                        });
+
+                    // 3. Deduct the dynamic stake amount from Player 2's wallet
+                    await FirebaseFirestore.instance
+                        .collection('users')
+                        .doc(p2Uid)
+                        .update({
+                          'coins': FieldValue.increment(-stakePerPlayer),
+                        });
+
+                    // 4. Initialize the match state with the dynamically assigned fields
                     await matchRef.update({
                       'rolesLocked': true,
                       'gameStarted': true,
                       'askerUid': uid,
-                      'answererUid': uid == d['player1']
-                          ? d['player2']
-                          : d['player1'],
+                      'answererUid': uid == p1Uid ? p2Uid : p1Uid,
                       'status': 'active',
                       'turn': 'asker',
+                      'bountyPool': totalPool,
                     });
                   },
                 ),

@@ -5,7 +5,11 @@ import 'package:flutter/material.dart';
 import '../matchmaking/match_screen.dart';
 
 class FriendsScreen extends StatelessWidget {
-  FriendsScreen({super.key});
+  // Added constructor parameters to capture incoming level selections from HomeScreen
+  final String? challengeLevel;
+  final int? challengeStake;
+
+  FriendsScreen({super.key, this.challengeLevel, this.challengeStake});
 
   final uid = FirebaseAuth.instance.currentUser!.uid;
 
@@ -74,9 +78,13 @@ class FriendsScreen extends StatelessWidget {
         .set({'uid': otherUid});
   }
 
-  // ================= SEND CHALLENGE =================
+  // ================= SEND CHALLENGE (UPDATED FIELDS) =================
   Future<void> sendChallenge(String otherUid, String name) async {
     final docRef = FirebaseFirestore.instance.collection('challenges').doc();
+
+    // Attach dynamic level states to pass them cleanly through the pipeline
+    final currentLevel = challengeLevel ?? 'Normal';
+    final currentStake = challengeStake ?? 200;
 
     await docRef.set({
       'id': docRef.id,
@@ -88,6 +96,11 @@ class FriendsScreen extends StatelessWidget {
       'status': 'pending',
       'type': 'game_challenge',
 
+      // Dynamic game setups passed through the invitation snapshot
+      'level': currentLevel,
+      'stakePerPlayer': currentStake,
+      'bountyPool': currentStake * 2,
+
       // IMPORTANT: prevents re-trigger loops
       'matchId': null,
       'acceptedAt': null,
@@ -95,16 +108,22 @@ class FriendsScreen extends StatelessWidget {
     });
   }
 
-  // ================= ACCEPT =================
+  // ================= ACCEPT (UPDATED WITH DYNAMIC COINS) =================
   Future<void> acceptChallenge(
     String challengeId,
     String fromUid,
     String toUid,
+    Map<String, dynamic> challengeData, // Pass full map payload here
     BuildContext context,
   ) async {
     final firestore = FirebaseFirestore.instance;
 
-    // 1. CREATE MATCH
+    // Pull tier configuration from the original challenge intent data
+    final String matchLevel = challengeData['level'] ?? 'Normal';
+    final int dynamicStake = challengeData['stakePerPlayer'] ?? 200;
+    final int dynamicPool = challengeData['bountyPool'] ?? 400;
+
+    // 1. CREATE MATCH WITH DYNAMIC RULES LATCHED
     final matchRef = await firestore.collection('matches').add({
       'player1': fromUid,
       'player2': toUid,
@@ -113,7 +132,10 @@ class FriendsScreen extends StatelessWidget {
       'player1Ready': false,
       'player2Ready': false,
 
-      'score': 100,
+      // High-stakes ecosystem configuration parameters
+      'level': matchLevel,
+      'stakePerPlayer': dynamicStake,
+      'bountyPool': dynamicPool,
 
       'rolesLocked': false,
       'gameStarted': false,
@@ -165,7 +187,9 @@ class FriendsScreen extends StatelessWidget {
                     color: Colors.yellow[100],
                     child: ListTile(
                       title: Text("Waiting for ${data['toName']} to accept"),
-                      subtitle: const Text("Challenge sent"),
+                      subtitle: Text(
+                        "Level: ${data['level'] ?? 'Normal'} (${data['stakePerPlayer'] ?? 200} coins)",
+                      ),
                     ),
                   );
                 }).toList(),
@@ -191,7 +215,7 @@ class FriendsScreen extends StatelessWidget {
                   return Card(
                     color: Colors.green[100],
                     child: ListTile(
-                      title: Text("Challenge accepted"),
+                      title: const Text("Challenge accepted"),
                       subtitle: const Text("Tap CONTINUE"),
 
                       trailing: ElevatedButton(
@@ -216,6 +240,7 @@ class FriendsScreen extends StatelessWidget {
             },
           ),
 
+          // ================= INCOMING CHALLENGES =================
           StreamBuilder<QuerySnapshot>(
             stream: incomingChallenges(),
             builder: (context, snapshot) {
@@ -229,12 +254,16 @@ class FriendsScreen extends StatelessWidget {
               return Column(
                 children: docs.map((doc) {
                   final data = doc.data() as Map<String, dynamic>;
+                  final currentLevelName = data['level'] ?? 'Normal';
+                  final currentStakeAmount = data['stakePerPlayer'] ?? 200;
 
                   return Card(
                     color: Colors.blue[100],
                     child: ListTile(
-                      title: Text("${data['fromName']} challenged you"),
-                      subtitle: const Text("Accept or decline"),
+                      title: Text(
+                        "${data['fromName']} challenged you ($currentLevelName)",
+                      ),
+                      subtitle: Text("Stakes: $currentStakeAmount Coins"),
 
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
@@ -242,50 +271,13 @@ class FriendsScreen extends StatelessWidget {
                           ElevatedButton(
                             child: const Text("ACCEPT"),
                             onPressed: () async {
-                              final matchRef = FirebaseFirestore.instance
-                                  .collection('matches')
-                                  .doc();
-
-                              await matchRef.set({
-                                'player1': data['fromUid'] ?? data['player1'],
-                                'player2': uid,
-                                'player1Name': data['fromName'] ?? '',
-                                'player2Name':
-                                    FirebaseAuth
-                                        .instance
-                                        .currentUser!
-                                        .displayName ??
-                                    'Player',
-
-                                'status': 'active',
-                                'score': 100,
-
-                                'player1Ready': false,
-                                'player2Ready': false,
-
-                                'rolesLocked': false,
-                                'gameStarted': false,
-
-                                'createdAt': FieldValue.serverTimestamp(),
-                              });
-
-                              await FirebaseFirestore.instance
-                                  .collection('challenges')
-                                  .doc(doc.id)
-                                  .update({
-                                    'status': 'accepted',
-                                    'matchStatus': 'active',
-                                    'matchId': matchRef.id,
-                                    'acceptedBy': uid,
-                                    'acceptedAt': FieldValue.serverTimestamp(),
-                                  });
-
-                              Navigator.push(
+                              // Forward data packet payload directly over into dynamic initialization parser
+                              await acceptChallenge(
+                                doc.id,
+                                data['fromUid'] ?? '',
+                                uid,
+                                data,
                                 context,
-                                MaterialPageRoute(
-                                  builder: (_) =>
-                                      MatchScreen(matchId: matchRef.id),
-                                ),
                               );
                             },
                           ),
