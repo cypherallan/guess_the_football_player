@@ -10,6 +10,7 @@ class MessageStreamView extends StatefulWidget {
   final bool isAnswerer;
   final Function(bool) onTriggerTimer;
   final Function() onIncrementNoAnswer;
+  final VoidCallback onStopTimers;
 
   const MessageStreamView({
     super.key,
@@ -21,6 +22,7 @@ class MessageStreamView extends StatefulWidget {
     required this.isAnswerer,
     required this.onTriggerTimer,
     required this.onIncrementNoAnswer,
+    required this.onStopTimers,
   });
 
   @override
@@ -263,7 +265,7 @@ class _MessageStreamViewState extends State<MessageStreamView> {
 
                                       // Change this block inside your YES button onPressed:
                                       onPressed: () async {
-                                        print("YES pressed ${DateTime.now()}");
+                                        widget.onStopTimers();
 
                                         // 1. Add the answer message
                                         await widget.messagesRef.add({
@@ -300,6 +302,7 @@ class _MessageStreamViewState extends State<MessageStreamView> {
                                       ),
                                       // Change this block inside your NO button onPressed:
                                       onPressed: () async {
+                                        widget.onStopTimers();
                                         widget.onIncrementNoAnswer();
 
                                         // Update the score AND switch the turn back to the asker

@@ -290,6 +290,7 @@ class _MatchScreenState extends State<MatchScreen> {
                     ),
                     PostGameCard(matchRef: matchRef, data: data, uid: uid),
                     const Divider(),
+                    // NEW CODE (Replace it with this)
                     Expanded(
                       child: MessageStreamView(
                         messagesRef: messagesRef,
@@ -298,9 +299,21 @@ class _MatchScreenState extends State<MatchScreen> {
                         uid: uid,
                         isAsker: isAsker,
                         isAnswerer: isAnswerer,
-                        onTriggerTimer: (askerMode) =>
-                            _startTimer(isAsker: askerMode),
+                        onTriggerTimer: (isAnswerReceived) {
+                          if (isAnswerReceived) {
+                            // An answer came in: stop the Answerer's timer countdown and start the Asker's timer!
+                            _startTimer(isAsker: true);
+                          } else {
+                            // A question was received: stop the Asker's countdown, reset time, and start the Answerer's countdown!
+                            setState(() {
+                              _timeLeft =
+                                  45; // Reset countdown fresh to 45 seconds for the answerer
+                            });
+                            _startTimer(isAsker: false);
+                          }
+                        },
                         onIncrementNoAnswer: () => _noAnswers++,
+                        onStopTimers: _stopTimers,
                       ),
                     ),
                     const Divider(),
