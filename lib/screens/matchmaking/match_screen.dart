@@ -147,147 +147,164 @@ class _MatchScreenState extends State<MatchScreen> {
         .doc(widget.matchId);
     final messagesRef = matchRef.collection('messages');
 
-    return WillPopScope(
-      onWillPop: () async {
-        final shouldQuit = await _showQuitConfirmationDialog();
-        if (shouldQuit) {
-          // FIX: Mark as quitting locally first so this device skips the overlay
-          setState(() => _isQuitting = true);
-
-          await _exitMatch(uid);
-          return true; // Allows the screen to close instantly
+    return StreamBuilder<DocumentSnapshot>(
+      stream: matchRef.snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
         }
-        return false; // Blocks closing if they tap NO
-      },
-      child: Scaffold(
-        appBar: AppBar(
-          title: const Text("Match"),
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back),
-            onPressed: () async {
-              final shouldQuit = await _showQuitConfirmationDialog();
-              if (!shouldQuit) return;
+        final doc = snapshot.data!;
+        if (!doc.exists || doc.data() == null) {
+          return const Scaffold(body: Center(child: Text("Loading match...")));
+        }
 
-              // FIX: Add this state update here as well!
-              setState(() => _isQuitting = true);
+        final data = doc.data() as Map<String, dynamic>;
+        final rolesLocked = data['rolesLocked'] ?? false;
+        final gameStarted = data['gameStarted'] ?? false;
+        final score = data['score'] ?? 100;
+        final askerUid = data['askerUid'];
+        final answererUid = data['answererUid'];
+        final status = data['status'];
+        final exitReason = data['exitReason'];
 
+        // Determine if the game has actually locked players into active progression state
+        final bool isGameActive =
+            rolesLocked || gameStarted || status == 'finished';
+
+        if (status == 'finished') {
+          _stopTimers();
+        }
+        // If a rematch starts, reset the local coinsAwarded flag so the new game can award coins again
+        if (status == 'active' && _coinsAwarded) {
+          _coinsAwarded = false;
+        }
+
+        final isAsker = askerUid != null && askerUid.toString() == uid;
+        final isAnswerer = answererUid != null && answererUid.toString() == uid;
+
+        // Stop background timers immediately if opponent leaves
+        if (status == 'finished' && exitReason == 'player_left') {
+          _stopTimers();
+        }
+
+        if (!_synced && data['friendsSynced'] != true) {
+          _synced = true;
+          WidgetsBinding.instance.addPostFrameCallback((_) async {
+            final p1 = data['player1'];
+            final p2 = data['player2'];
+            await matchRef.update({'friendsSynced': true});
+            await FirebaseFirestore.instance
+                .collection('users')
+                .doc(p1)
+                .collection('friends')
+                .doc(p2)
+                .set({'uid': p2});
+            await FirebaseFirestore.instance
+                .collection('users')
+                .doc(p2)
+                .collection('friends')
+                .doc(p1)
+                .set({'uid': p1});
+          });
+        }
+
+        if (status == 'finished' && !_coinsAwarded) {
+          _coinsAwarded = true;
+          WidgetsBinding.instance.addPostFrameCallback((_) async {
+            final freshSnap = await matchRef.get();
+            if (!freshSnap.exists) return;
+            final freshData = freshSnap.data() as Map<String, dynamic>;
+
+            final endedByTimeout = freshData['endedByTimeout'] ?? false;
+            final exitReason = freshData['exitReason'];
+            final winnerUid = freshData['winner'];
+            final poolAmount = (freshData['bountyPool'] ?? 100) as int;
+
+            int coinsChange = 0;
+
+            if (endedByTimeout || exitReason == 'player_left') {
+              final int stakePerPlayer =
+                  (freshData['stakePerPlayer'] ?? 50) as int;
+
+              if (winnerUid == uid) {
+                coinsChange = stakePerPlayer + (stakePerPlayer * 2);
+              } else {
+                coinsChange = -(stakePerPlayer * 2);
+              }
+            } else {
+              if (winnerUid == uid) {
+                coinsChange = poolAmount;
+              } else {
+                coinsChange = 0;
+              }
+            }
+
+            if (coinsChange != 0) {
+              await FirebaseFirestore.instance
+                  .collection('users')
+                  .doc(uid)
+                  .update({'coins': FieldValue.increment(coinsChange)});
+            }
+          });
+        }
+
+        // Helper cleanup function shared across back-button and app bar leading buttons
+        Future<void> handleDynamicExit() async {
+          if (!isGameActive) {
+            // Free exit: No confirmations, no screen blocks, cleanup empty lobby structures safely
+            setState(() => _isQuitting = true);
+
+            // Clean up database room cleanly if player 1 abandons empty queue
+            if (data['player1'] == uid && data['player2'] == null) {
+              await matchRef.delete();
+            } else if (data['player2'] == uid && !rolesLocked) {
+              await matchRef.update({'player2': null, 'status': 'searching'});
+            } else {
               await _exitMatch(uid);
-              if (!context.mounted) return;
+            }
 
+            if (context.mounted) {
               Navigator.of(context).pushAndRemoveUntil(
                 MaterialPageRoute(builder: (_) => HomeScreen()),
                 (route) => false,
               );
-            },
-          ),
-        ),
-        body: StreamBuilder<DocumentSnapshot>(
-          stream: matchRef.snapshots(),
-          builder: (context, snapshot) {
-            if (!snapshot.hasData)
-              return const Center(child: CircularProgressIndicator());
-            final doc = snapshot.data!;
-            if (!doc.exists || doc.data() == null)
-              return const Center(child: Text("Loading match..."));
-
-            final data = doc.data() as Map<String, dynamic>;
-            final rolesLocked = data['rolesLocked'] ?? false;
-            final score = data['score'] ?? 100;
-            final askerUid = data['askerUid'];
-            final answererUid = data['answererUid'];
-            final status = data['status'];
-            final exitReason = data['exitReason'];
-            if (status == 'finished') {
-              _stopTimers();
             }
-            // If a rematch starts, reset the local coinsAwarded flag so the new game can award coins again
-            if (status == 'active' && _coinsAwarded) {
-              _coinsAwarded = false;
+          } else {
+            // Hard Lock-in: Trigger warning modal layout flow
+            final shouldQuit = await _showQuitConfirmationDialog();
+            if (!shouldQuit) return;
+
+            setState(() => _isQuitting = true);
+            await _exitMatch(uid);
+
+            if (context.mounted) {
+              Navigator.of(context).pushAndRemoveUntil(
+                MaterialPageRoute(builder: (_) => HomeScreen()),
+                (route) => false,
+              );
             }
+          }
+        }
 
-            final isAsker = askerUid != null && askerUid.toString() == uid;
-            final isAnswerer =
-                answererUid != null && answererUid.toString() == uid;
-
-            // Stop background timers immediately if opponent leaves
-            if (status == 'finished' && exitReason == 'player_left') {
-              _stopTimers();
-            }
-
-            if (!_synced && data['friendsSynced'] != true) {
-              _synced = true;
-              WidgetsBinding.instance.addPostFrameCallback((_) async {
-                final p1 = data['player1'];
-                final p2 = data['player2'];
-                await matchRef.update({'friendsSynced': true});
-                await FirebaseFirestore.instance
-                    .collection('users')
-                    .doc(p1)
-                    .collection('friends')
-                    .doc(p2)
-                    .set({'uid': p2});
-                await FirebaseFirestore.instance
-                    .collection('users')
-                    .doc(p2)
-                    .collection('friends')
-                    .doc(p1)
-                    .set({'uid': p1});
-              });
-            }
-
-            //  NEW CODE - PASTE THIS EXACTLY:
-            if (status == 'finished' && !_coinsAwarded) {
-              _coinsAwarded = true;
-              WidgetsBinding.instance.addPostFrameCallback((_) async {
-                final freshSnap = await matchRef.get();
-                if (!freshSnap.exists) return;
-                final freshData = freshSnap.data() as Map<String, dynamic>;
-
-                final endedByTimeout = freshData['endedByTimeout'] ?? false;
-                final exitReason = freshData['exitReason'];
-                final winnerUid = freshData['winner'];
-                final poolAmount = (freshData['bountyPool'] ?? 100) as int;
-
-                int coinsChange = 0;
-
-                // SCENARIO A: Bad Ending (Timeout or Rage Quit)
-                // Inside Scenario A (Bad Ending) inside match_screen.dart:
-                if (endedByTimeout || exitReason == 'player_left') {
-                  final int stakePerPlayer =
-                      (freshData['stakePerPlayer'] ?? 50) as int;
-
-                  if (winnerUid == uid) {
-                    // Innocent player gets their entry fee back + the penalty payout
-                    coinsChange = stakePerPlayer + (stakePerPlayer * 2);
-                  } else {
-                    // The rule-breaker loses twice their single stake from their main wallet
-                    coinsChange = -(stakePerPlayer * 2);
-                  }
-                }
-                // SCENARIO B: Clean Ending (A correct guess or normal game resolution)
-                else {
-                  if (winnerUid == uid) {
-                    // The winner takes the entire locked 100-coin stakes pool
-                    coinsChange = poolAmount;
-                  } else {
-                    // The loser gets 0 coin change (their 50 coin entry fee remains lost)
-                    coinsChange = 0;
-                  }
-                }
-
-                // Apply the clean transaction directly to the user profile
-                if (coinsChange != 0) {
-                  await FirebaseFirestore.instance
-                      .collection('users')
-                      .doc(uid)
-                      .update({'coins': FieldValue.increment(coinsChange)});
-                }
-              });
-            }
-
-            return Stack(
+        return PopScope(
+          canPop:
+              false, // Override systemic popping entirely to use custom route handler execution
+          onPopInvokedWithResult: (didPop, result) async {
+            if (didPop) return;
+            await handleDynamicExit();
+          },
+          child: Scaffold(
+            appBar: AppBar(
+              title: const Text("Match"),
+              leading: IconButton(
+                icon: const Icon(Icons.arrow_back),
+                onPressed: () async => await handleDynamicExit(),
+              ),
+            ),
+            body: Stack(
               children: [
-                // MAIN BACKGROUND CONTENT
                 Column(
                   children: [
                     if (status == 'active')
@@ -300,23 +317,7 @@ class _MatchScreenState extends State<MatchScreen> {
                               backgroundColor: Colors.red,
                             ),
                             child: const Text("QUIT"),
-                            onPressed: () async {
-                              final shouldQuit =
-                                  await _showQuitConfirmationDialog();
-                              if (!shouldQuit) return;
-
-                              // FIX: Mark as quitting locally first so the overlay is ignored
-                              setState(() => _isQuitting = true);
-
-                              await _exitMatch(uid);
-
-                              if (!context.mounted) return;
-
-                              Navigator.of(context).pushAndRemoveUntil(
-                                MaterialPageRoute(builder: (_) => HomeScreen()),
-                                (route) => false,
-                              );
-                            },
+                            onPressed: () async => await handleDynamicExit(),
                           ),
                         ),
                       ),
@@ -329,7 +330,6 @@ class _MatchScreenState extends State<MatchScreen> {
                     ),
                     PostGameCard(matchRef: matchRef, data: data, uid: uid),
                     const Divider(),
-                    // NEW CODE (Replace it with this)
                     Expanded(
                       child: MessageStreamView(
                         messagesRef: messagesRef,
@@ -340,13 +340,10 @@ class _MatchScreenState extends State<MatchScreen> {
                         isAnswerer: isAnswerer,
                         onTriggerTimer: (isAnswerReceived) {
                           if (isAnswerReceived) {
-                            // An answer came in: stop the Answerer's timer countdown and start the Asker's timer!
                             _startTimer(isAsker: true);
                           } else {
-                            // A question was received: stop the Asker's countdown, reset time, and start the Answerer's countdown!
                             setState(() {
-                              _timeLeft =
-                                  45; // Reset countdown fresh to 45 seconds for the answerer
+                              _timeLeft = 45;
                             });
                             _startTimer(isAsker: false);
                           }
@@ -373,8 +370,6 @@ class _MatchScreenState extends State<MatchScreen> {
                     ),
                   ],
                 ),
-
-                // FIX: Added !_isQuitting check to hide it from the person who left
                 if (status == 'finished' &&
                     exitReason == 'player_left' &&
                     !_isQuitting)
@@ -384,9 +379,6 @@ class _MatchScreenState extends State<MatchScreen> {
                         dismissible: false,
                         color: Colors.black.withOpacity(0.85),
                       ),
-                      // ... your centered card widget
-
-                      // The centered pop-up card
                       Center(
                         child: Card(
                           margin: const EdgeInsets.all(20),
@@ -442,10 +434,10 @@ class _MatchScreenState extends State<MatchScreen> {
                     ],
                   ),
               ],
-            );
-          },
-        ),
-      ),
+            ),
+          ),
+        );
+      },
     );
   }
 
