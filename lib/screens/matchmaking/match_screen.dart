@@ -195,6 +195,7 @@ class _MatchScreenState extends State<MatchScreen> {
             final askerUid = data['askerUid'];
             final answererUid = data['answererUid'];
             final status = data['status'];
+            final exitReason = data['exitReason'];
 
             final isAsker = askerUid != null && askerUid.toString() == uid;
             final isAnswerer =
@@ -232,75 +233,129 @@ class _MatchScreenState extends State<MatchScreen> {
               });
             }
 
-            return Column(
+            return Stack(
               children: [
-                if (status == 'active')
-                  Align(
-                    alignment: Alignment.topRight,
-                    child: Padding(
-                      padding: const EdgeInsets.all(8.0),
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.red,
+                Column(
+                  children: [
+                    if (status == 'finished' && exitReason == 'player_left')
+                      Positioned.fill(
+                        child: Container(
+                          color: Colors.black.withOpacity(0.8),
+                          child: Center(
+                            child: Card(
+                              margin: const EdgeInsets.all(20),
+                              child: Padding(
+                                padding: const EdgeInsets.all(20),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Text(
+                                      "Opponent has quit the game",
+                                      style: TextStyle(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+
+                                    const SizedBox(height: 10),
+
+                                    Text(
+                                      "You have been awarded ${data['score'] ?? 0} points",
+                                      style: const TextStyle(fontSize: 16),
+                                    ),
+
+                                    const SizedBox(height: 20),
+
+                                    ElevatedButton(
+                                      onPressed: () {
+                                        Navigator.of(
+                                          context,
+                                        ).pushAndRemoveUntil(
+                                          MaterialPageRoute(
+                                            builder: (_) => HomeScreen(),
+                                          ),
+                                          (route) => false,
+                                        );
+                                      },
+                                      child: const Text("Return to Home"),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
                         ),
-                        child: const Text("QUIT"),
-                        // safely passes control loop to WillPopScope
-                        onPressed: () async {
-                          final shouldQuit =
-                              await _showQuitConfirmationDialog();
+                      ),
 
-                          if (!shouldQuit) return;
+                    if (status == 'active')
+                      Align(
+                        alignment: Alignment.topRight,
+                        child: Padding(
+                          padding: const EdgeInsets.all(8.0),
+                          child: ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.red,
+                            ),
+                            child: const Text("QUIT"),
+                            // safely passes control loop to WillPopScope
+                            onPressed: () async {
+                              final shouldQuit =
+                                  await _showQuitConfirmationDialog();
 
-                          await _exitMatch(uid);
+                              if (!shouldQuit) return;
 
-                          if (!context.mounted) return;
+                              await _exitMatch(uid);
 
-                          Navigator.of(context).pushAndRemoveUntil(
-                            MaterialPageRoute(builder: (_) => HomeScreen()),
-                            (route) => false,
-                          );
-                        },
+                              if (!context.mounted) return;
+
+                              Navigator.of(context).pushAndRemoveUntil(
+                                MaterialPageRoute(builder: (_) => HomeScreen()),
+                                (route) => false,
+                              );
+                            },
+                          ),
+                        ),
+                      ),
+
+                    GameStatusCard(
+                      data: data,
+                      rolesLocked: rolesLocked,
+                      timeLeft: _timeLeft,
+                      isAsker: isAsker,
+                      score: score,
+                    ),
+                    PostGameCard(matchRef: matchRef, data: data, uid: uid),
+                    const Divider(),
+                    Expanded(
+                      child: MessageStreamView(
+                        messagesRef: messagesRef,
+                        matchRef: matchRef,
+                        data: data,
+                        uid: uid,
+                        isAsker: isAsker,
+                        isAnswerer: isAnswerer,
+                        onTriggerTimer: (askerMode) =>
+                            _startTimer(isAsker: askerMode),
+                        onIncrementNoAnswer: () => _noAnswers++,
                       ),
                     ),
-                  ),
-
-                GameStatusCard(
-                  data: data,
-                  rolesLocked: rolesLocked,
-                  timeLeft: _timeLeft,
-                  isAsker: isAsker,
-                  score: score,
-                ),
-                PostGameCard(matchRef: matchRef, data: data, uid: uid),
-                const Divider(),
-                Expanded(
-                  child: MessageStreamView(
-                    messagesRef: messagesRef,
-                    matchRef: matchRef,
-                    data: data,
-                    uid: uid,
-                    isAsker: isAsker,
-                    isAnswerer: isAnswerer,
-                    onTriggerTimer: (askerMode) =>
-                        _startTimer(isAsker: askerMode),
-                    onIncrementNoAnswer: () => _noAnswers++,
-                  ),
-                ),
-                const Divider(),
-                SetupGameView(matchRef: matchRef, data: data, uid: uid),
-                ActiveGameplay(
-                  matchRef: matchRef,
-                  messagesRef: messagesRef,
-                  data: data,
-                  uid: uid,
-                  isAsker: isAsker,
-                  isAnswerer: isAnswerer,
-                  score: score,
-                  onStopTimers: _stopTimers,
-                  coinsAwarded: _coinsAwarded,
-                  onMarkCoinsAwarded: () =>
-                      setState(() => _coinsAwarded = true),
-                  coinService: coinService,
+                    const Divider(),
+                    SetupGameView(matchRef: matchRef, data: data, uid: uid),
+                    ActiveGameplay(
+                      matchRef: matchRef,
+                      messagesRef: messagesRef,
+                      data: data,
+                      uid: uid,
+                      isAsker: isAsker,
+                      isAnswerer: isAnswerer,
+                      score: score,
+                      onStopTimers: _stopTimers,
+                      coinsAwarded: _coinsAwarded,
+                      onMarkCoinsAwarded: () =>
+                          setState(() => _coinsAwarded = true),
+                      coinService: coinService,
+                    ),
+                  ],
                 ),
               ],
             );
