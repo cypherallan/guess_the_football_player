@@ -136,50 +136,99 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen> {
       appBar: AppBar(title: const Text("Online PvP")),
 
       body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ================= INVITES =================
+          // ================= INVITES SECTION =================
           StreamBuilder<QuerySnapshot>(
             stream: getIncomingChallenges(),
             builder: (context, snapshot) {
-              if (!snapshot.hasData) return const SizedBox();
-
+              if (!snapshot.hasData) return const SizedBox.shrink();
               final invites = snapshot.data!.docs;
+              if (invites.isEmpty) return const SizedBox.shrink();
 
-              if (invites.isEmpty) return const SizedBox();
-
-              return Expanded(
-                child: ListView(
-                  children: invites.map((doc) {
-                    final data = doc.data() as Map<String, dynamic>;
-
-                    return Card(
-                      child: ListTile(
-                        title: Text("Invite from ${data['fromName']}"),
-                        subtitle: const Text("Tap accept to start match"),
-
-                        trailing: ElevatedButton(
-                          onPressed: () async {
-                            if (_processingAccept) return;
-
-                            await acceptInvite(
-                              doc.id,
-                              data['fromUid'],
-                              data['fromName'],
-                            );
-                          },
-                          child: const Text("ACCEPT"),
+              //  TO THIS:
+              return Container(
+                color: Colors.amber.withOpacity(0.05),
+                constraints: BoxConstraints(
+                  maxHeight:
+                      MediaQuery.of(context).size.height *
+                      0.35, // Safely caps the height here
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Padding(
+                      padding: EdgeInsets.only(
+                        left: 16.0,
+                        top: 12.0,
+                        bottom: 4.0,
+                      ),
+                      child: Text(
+                        "INCOMING CHALLENGES",
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.amberAccent,
                         ),
                       ),
-                    );
-                  }).toList(),
+                    ),
+                    Expanded(
+                      child: ListView(
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        children: invites.map((doc) {
+                          final data = doc.data() as Map<String, dynamic>;
+                          return Card(
+                            elevation: 3,
+                            child: ListTile(
+                              title: Text(
+                                "Invite from ${data['fromName']}",
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              subtitle: const Text("Tap accept to start match"),
+                              trailing: ElevatedButton(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.green,
+                                ),
+                                onPressed: () async {
+                                  if (_processingAccept) return;
+                                  await acceptInvite(
+                                    doc.id,
+                                    data['fromUid'],
+                                    data['fromName'],
+                                  );
+                                },
+                                child: const Text(
+                                  "ACCEPT",
+                                  style: TextStyle(color: Colors.white),
+                                ),
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                    const Divider(height: 1),
+                  ],
                 ),
               );
             },
           ),
 
-          const Divider(),
+          const Padding(
+            padding: EdgeInsets.only(left: 16.0, top: 16.0, bottom: 8.0),
+            child: Text(
+              "ONLINE PLAYERS",
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: Colors.grey,
+              ),
+            ),
+          ),
 
-          // ================= ONLINE USERS =================
+          // ================= ONLINE USERS SECTION =================
           Expanded(
             child: StreamBuilder<QuerySnapshot>(
               stream: getOnlineUsers(),
@@ -192,18 +241,57 @@ class _OnlineUsersScreenState extends State<OnlineUsersScreen> {
                     .where((doc) => doc.id != uid)
                     .toList();
 
+                if (users.isEmpty) {
+                  return const Center(
+                    child: Text(
+                      "Nobody else is online right now.",
+                      style: TextStyle(color: Colors.white38),
+                    ),
+                  );
+                }
+
                 return ListView.builder(
                   itemCount: users.length,
                   itemBuilder: (context, index) {
                     final data = users[index].data() as Map<String, dynamic>;
-
                     final opponentId = data['uid'] ?? users[index].id;
                     final opponentName = data['displayName'] ?? 'Unknown';
 
                     return ListTile(
-                      title: Text(opponentName),
-                      subtitle: const Text("Online"),
-
+                      leading: Stack(
+                        children: [
+                          const CircleAvatar(child: Icon(Icons.person)),
+                          Positioned(
+                            right: 0,
+                            bottom: 0,
+                            child: Container(
+                              width: 12,
+                              height: 12,
+                              decoration: BoxDecoration(
+                                color: Colors.green,
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: Theme.of(
+                                    context,
+                                  ).scaffoldBackgroundColor,
+                                  width: 2,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      title: Text(
+                        opponentName,
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                      subtitle: const Text(
+                        "Ready to play",
+                        style: TextStyle(
+                          color: Colors.greenAccent,
+                          fontSize: 12,
+                        ),
+                      ),
                       trailing: ElevatedButton(
                         onPressed: () => sendInvite(opponentId, opponentName),
                         child: const Text("Invite"),

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-
+import '../../screens/online/online_users_screen.dart';
 import '../../widgets/home/dashboard_header.dart';
 import '../../widgets/home/coin_balance_card.dart';
 import '../../widgets/home/recent_player_card.dart';
@@ -9,9 +9,6 @@ import '../../widgets/home/game_menu_card.dart';
 import 'package:guess_the_footballer/screens/matchmaking/widgets/sent_challenges_section.dart';
 import '../friends/friends_screen.dart';
 import '../ai/ai_guess_player_screen.dart';
-// Make sure to import your MatchScreen here if it's in a different folder, e.g.:
-// import '../match/match_screen.dart';
-
 import '../../core/services/auth_service.dart';
 
 class HomeScreen extends StatelessWidget {
@@ -150,15 +147,56 @@ class HomeScreen extends StatelessWidget {
             },
           ),
           IconButton(icon: const Icon(Icons.emoji_events), onPressed: () {}),
-          IconButton(
-            icon: const Icon(Icons.people),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => FriendsScreen()),
+
+          // 🟢 YOUR OLD ICONBUTTON IS NOW REPLACED BY THIS STREAMBUILDER:
+          StreamBuilder<QuerySnapshot>(
+            stream: FirebaseFirestore.instance
+                .collection('users')
+                .where('isOnline', isEqualTo: true)
+                .snapshots(),
+            builder: (context, snapshot) {
+              final currentUid = FirebaseAuth.instance.currentUser?.uid;
+              final onlineUsers = snapshot.hasData
+                  ? snapshot.data!.docs
+                        .where((doc) => doc.id != currentUid)
+                        .toList()
+                  : [];
+
+              final bool isAnyoneOnline = onlineUsers.isNotEmpty;
+
+              return Stack(
+                alignment: Alignment.center,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.people, size: 28),
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const OnlineUsersScreen(),
+                        ),
+                      );
+                    },
+                  ),
+                  if (isAnyoneOnline)
+                    Positioned(
+                      right: 8,
+                      top: 8,
+                      child: Container(
+                        width: 10,
+                        height: 10,
+                        decoration: BoxDecoration(
+                          color: Colors.greenAccent,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.black, width: 1.5),
+                        ),
+                      ),
+                    ),
+                ],
               );
             },
           ),
+
           Builder(
             builder: (context) => IconButton(
               icon: const Icon(Icons.menu),
