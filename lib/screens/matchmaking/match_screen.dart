@@ -200,6 +200,10 @@ class _MatchScreenState extends State<MatchScreen> {
             if (status == 'finished') {
               _stopTimers();
             }
+            // If a rematch starts, reset the local coinsAwarded flag so the new game can award coins again
+            if (status == 'active' && _coinsAwarded) {
+              _coinsAwarded = false;
+            }
 
             final isAsker = askerUid != null && askerUid.toString() == uid;
             final isAnswerer =
