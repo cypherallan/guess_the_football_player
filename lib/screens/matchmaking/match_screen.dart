@@ -251,10 +251,36 @@ class _MatchScreenState extends State<MatchScreen> {
         }
 
         // Helper cleanup function shared across back-button and app bar leading buttons
+        // Helper cleanup function shared across back-button and app bar leading buttons
         Future<void> handleDynamicExit() async {
           if (!isGameActive) {
-            // Free exit: No confirmations, no screen blocks, cleanup empty lobby structures safely
+            // Free exit: No confirmations, no screen blocks
             setState(() => _isQuitting = true);
+
+            final firestore = FirebaseFirestore.instance;
+
+            // 🔍 NEW: Find the challenge associated with this match and mark it back to 'pending'
+            try {
+              final challengeSnap = await firestore
+                  .collection('challenges')
+                  .where('matchId', isEqualTo: widget.matchId)
+                  .limit(1)
+                  .get();
+
+              if (challengeSnap.docs.isNotEmpty) {
+                await firestore
+                    .collection('challenges')
+                    .doc(challengeSnap.docs.first.id)
+                    .update({
+                      'status': 'pending',
+                      'matchStatus': 'searching',
+                      'acceptedBy': null,
+                      'acceptedAt': null,
+                    });
+              }
+            } catch (e) {
+              debugPrint("Error restoring challenge status: $e");
+            }
 
             // Clean up database room cleanly if player 1 abandons empty queue
             if (data['player1'] == uid && data['player2'] == null) {

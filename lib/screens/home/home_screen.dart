@@ -6,7 +6,7 @@ import '../../widgets/home/dashboard_header.dart';
 import '../../widgets/home/coin_balance_card.dart';
 import '../../widgets/home/recent_player_card.dart';
 import '../../widgets/home/game_menu_card.dart';
-
+import 'package:guess_the_footballer/screens/matchmaking/widgets/sent_challenges_section.dart';
 import '../friends/friends_screen.dart';
 import '../ai/ai_guess_player_screen.dart';
 // Make sure to import your MatchScreen here if it's in a different folder, e.g.:
@@ -229,6 +229,7 @@ class HomeScreen extends StatelessWidget {
           ),
           const SizedBox(height: 20),
           const RecentPlayerCard(),
+          const SentChallengesSection(),
           const SizedBox(height: 25),
           const Text(
             "Quick Actions",
