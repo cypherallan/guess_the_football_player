@@ -102,6 +102,7 @@ class _MatchScreenState extends State<MatchScreen> {
     required String matchId,
     required Map<String, dynamic> updateData,
   }) async {
+    _stopTimers(); // FIX: Force timers to stop locally immediately
     await matchRef.update(updateData);
 
     final challengeSnap = await FirebaseFirestore.instance
@@ -196,6 +197,9 @@ class _MatchScreenState extends State<MatchScreen> {
             final answererUid = data['answererUid'];
             final status = data['status'];
             final exitReason = data['exitReason'];
+            if (status == 'finished') {
+              _stopTimers();
+            }
 
             final isAsker = askerUid != null && askerUid.toString() == uid;
             final isAnswerer =
@@ -392,6 +396,7 @@ class _MatchScreenState extends State<MatchScreen> {
   @override
   void dispose() {
     _askerTimer?.cancel();
+    _stopTimers();
     _answererTimer?.cancel();
     super.dispose();
   }
