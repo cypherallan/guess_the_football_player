@@ -50,7 +50,6 @@ class _MatchScreenState extends State<MatchScreen> {
         final currentData = current.data() as Map<String, dynamic>;
 
         if (currentData['status'] != 'finished') {
-          // Replace the old matchRef.update(...) with:
           await _endMatchInFirestore(
             matchId: widget.matchId,
             updateData: {
@@ -86,7 +85,6 @@ class _MatchScreenState extends State<MatchScreen> {
     final player2 = data['player2'];
     final opponent = uid == player1 ? player2 : player1;
 
-    // Replace the old matchRef.update(...) with:
     await _endMatchInFirestore(
       matchId: widget.matchId,
       updateData: {
@@ -102,10 +100,8 @@ class _MatchScreenState extends State<MatchScreen> {
     required String matchId,
     required Map<String, dynamic> updateData,
   }) async {
-    // 1. Update the match document
     await matchRef.update(updateData);
 
-    // 2. Update the parent challenge document to remove it from the FriendsScreen lists
     final challengeSnap = await FirebaseFirestore.instance
         .collection('challenges')
         .where('matchId', isEqualTo: matchId)
@@ -119,7 +115,6 @@ class _MatchScreenState extends State<MatchScreen> {
     }
   }
 
-  // Visual demonstration of dialog structure requested by user preferences
   Future<bool> _showQuitConfirmationDialog() async {
     final result = await showDialog<bool>(
       context: context,
@@ -154,25 +149,20 @@ class _MatchScreenState extends State<MatchScreen> {
         final shouldQuit = await _showQuitConfirmationDialog();
         if (shouldQuit) {
           await _exitMatch(uid);
-          return true; // Returning true allows the route stack to safely pop exactly once
+          return true;
         }
-        return false; // Blocks pop if user selected "NO"
+        return false;
       },
       child: Scaffold(
         appBar: AppBar(
           title: const Text("Match"),
           leading: IconButton(
             icon: const Icon(Icons.arrow_back),
-            // safely passes back control loop to WillPopScope
             onPressed: () async {
               final shouldQuit = await _showQuitConfirmationDialog();
-
               if (!shouldQuit) return;
-
               await _exitMatch(uid);
-
               if (!context.mounted) return;
-
               Navigator.of(context).pushAndRemoveUntil(
                 MaterialPageRoute(builder: (_) => HomeScreen()),
                 (route) => false,
@@ -200,6 +190,11 @@ class _MatchScreenState extends State<MatchScreen> {
             final isAsker = askerUid != null && askerUid.toString() == uid;
             final isAnswerer =
                 answererUid != null && answererUid.toString() == uid;
+
+            // Stop background timers immediately if opponent leaves
+            if (status == 'finished' && exitReason == 'player_left') {
+              _stopTimers();
+            }
 
             if (!_synced && data['friendsSynced'] != true) {
               _synced = true;
@@ -235,58 +230,9 @@ class _MatchScreenState extends State<MatchScreen> {
 
             return Stack(
               children: [
+                // MAIN BACKGROUND CONTENT
                 Column(
                   children: [
-                    if (status == 'finished' && exitReason == 'player_left')
-                      Positioned.fill(
-                        child: Container(
-                          color: Colors.black.withOpacity(0.8),
-                          child: Center(
-                            child: Card(
-                              margin: const EdgeInsets.all(20),
-                              child: Padding(
-                                padding: const EdgeInsets.all(20),
-                                child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const Text(
-                                      "Opponent has quit the game",
-                                      style: TextStyle(
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-
-                                    const SizedBox(height: 10),
-
-                                    Text(
-                                      "You have been awarded ${data['score'] ?? 0} points",
-                                      style: const TextStyle(fontSize: 16),
-                                    ),
-
-                                    const SizedBox(height: 20),
-
-                                    ElevatedButton(
-                                      onPressed: () {
-                                        Navigator.of(
-                                          context,
-                                        ).pushAndRemoveUntil(
-                                          MaterialPageRoute(
-                                            builder: (_) => HomeScreen(),
-                                          ),
-                                          (route) => false,
-                                        );
-                                      },
-                                      child: const Text("Return to Home"),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-
                     if (status == 'active')
                       Align(
                         alignment: Alignment.topRight,
@@ -297,17 +243,12 @@ class _MatchScreenState extends State<MatchScreen> {
                               backgroundColor: Colors.red,
                             ),
                             child: const Text("QUIT"),
-                            // safely passes control loop to WillPopScope
                             onPressed: () async {
                               final shouldQuit =
                                   await _showQuitConfirmationDialog();
-
                               if (!shouldQuit) return;
-
                               await _exitMatch(uid);
-
                               if (!context.mounted) return;
-
                               Navigator.of(context).pushAndRemoveUntil(
                                 MaterialPageRoute(builder: (_) => HomeScreen()),
                                 (route) => false,
@@ -316,7 +257,6 @@ class _MatchScreenState extends State<MatchScreen> {
                           ),
                         ),
                       ),
-
                     GameStatusCard(
                       data: data,
                       rolesLocked: rolesLocked,
@@ -357,6 +297,73 @@ class _MatchScreenState extends State<MatchScreen> {
                     ),
                   ],
                 ),
+
+                // FULL SCREEN INTERCEPTING OVERLAY
+                // FULL SCREEN INTERCEPTING OVERLAY
+                if (status == 'finished' && exitReason == 'player_left')
+                  Stack(
+                    children: [
+                      // FIX: Removed 'const' and updated color to use valid opacity
+                      ModalBarrier(
+                        dismissible: false,
+                        color: Colors.black.withOpacity(0.85),
+                      ),
+
+                      // The centered pop-up card
+                      Center(
+                        child: Card(
+                          margin: const EdgeInsets.all(20),
+                          elevation: 8,
+                          child: Padding(
+                            padding: const EdgeInsets.all(24),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  Icons.warning_amber_rounded,
+                                  color: Colors.red,
+                                  size: 48,
+                                ),
+                                const SizedBox(height: 16),
+                                const Text(
+                                  "Opponent has quit the game",
+                                  style: TextStyle(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
+                                const SizedBox(height: 10),
+                                Text(
+                                  "You have been awarded ${data['score'] ?? 0} points",
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    color: Colors.grey,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
+                                const SizedBox(height: 24),
+                                ElevatedButton(
+                                  style: ElevatedButton.styleFrom(
+                                    minimumSize: const Size(180, 45),
+                                  ),
+                                  onPressed: () {
+                                    Navigator.of(context).pushAndRemoveUntil(
+                                      MaterialPageRoute(
+                                        builder: (_) => HomeScreen(),
+                                      ),
+                                      (route) => false,
+                                    );
+                                  },
+                                  child: const Text("Return to Home"),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
               ],
             );
           },
