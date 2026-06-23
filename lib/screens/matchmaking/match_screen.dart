@@ -20,7 +20,9 @@ class MatchScreen extends StatefulWidget {
 
 class _MatchScreenState extends State<MatchScreen> {
   bool _synced = false;
+  bool _isQuitting = false; // FIX: Add this flag to track the quitter
   Timer? _askerTimer;
+  // ... rest of your existing variables
   Timer? _answererTimer;
   int _timeLeft = 45;
   late DocumentReference matchRef;
@@ -148,10 +150,13 @@ class _MatchScreenState extends State<MatchScreen> {
       onWillPop: () async {
         final shouldQuit = await _showQuitConfirmationDialog();
         if (shouldQuit) {
+          // FIX: Mark as quitting locally first so this device skips the overlay
+          setState(() => _isQuitting = true);
+
           await _exitMatch(uid);
-          return true;
+          return true; // Allows the screen to close instantly
         }
-        return false;
+        return false; // Blocks closing if they tap NO
       },
       child: Scaffold(
         appBar: AppBar(
@@ -161,8 +166,13 @@ class _MatchScreenState extends State<MatchScreen> {
             onPressed: () async {
               final shouldQuit = await _showQuitConfirmationDialog();
               if (!shouldQuit) return;
+
+              // FIX: Add this state update here as well!
+              setState(() => _isQuitting = true);
+
               await _exitMatch(uid);
               if (!context.mounted) return;
+
               Navigator.of(context).pushAndRemoveUntil(
                 MaterialPageRoute(builder: (_) => HomeScreen()),
                 (route) => false,
@@ -247,8 +257,14 @@ class _MatchScreenState extends State<MatchScreen> {
                               final shouldQuit =
                                   await _showQuitConfirmationDialog();
                               if (!shouldQuit) return;
+
+                              // FIX: Mark as quitting locally first so the overlay is ignored
+                              setState(() => _isQuitting = true);
+
                               await _exitMatch(uid);
+
                               if (!context.mounted) return;
+
                               Navigator.of(context).pushAndRemoveUntil(
                                 MaterialPageRoute(builder: (_) => HomeScreen()),
                                 (route) => false,
@@ -298,16 +314,17 @@ class _MatchScreenState extends State<MatchScreen> {
                   ],
                 ),
 
-                // FULL SCREEN INTERCEPTING OVERLAY
-                // FULL SCREEN INTERCEPTING OVERLAY
-                if (status == 'finished' && exitReason == 'player_left')
+                // FIX: Added !_isQuitting check to hide it from the person who left
+                if (status == 'finished' &&
+                    exitReason == 'player_left' &&
+                    !_isQuitting)
                   Stack(
                     children: [
-                      // FIX: Removed 'const' and updated color to use valid opacity
                       ModalBarrier(
                         dismissible: false,
                         color: Colors.black.withOpacity(0.85),
                       ),
+                      // ... your centered card widget
 
                       // The centered pop-up card
                       Center(
