@@ -7,112 +7,12 @@ import '../../widgets/home/coin_balance_card.dart';
 import '../../widgets/home/recent_player_card.dart';
 import '../../widgets/home/game_menu_card.dart';
 import 'package:guess_the_footballer/screens/matchmaking/widgets/sent_challenges_section.dart';
-import '../friends/friends_screen.dart';
-import '../ai/ai_guess_player_screen.dart';
 import '../../core/services/auth_service.dart';
+import '../../screens/matchmaking/widgets/level_selection_screen.dart';
+import '../../screens/ai/ai_level_selection_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
-
-  // Method to display your dynamic high-stakes levels selection panel
-  void _showLevelSelectionBottomSheet(BuildContext context) {
-    final tiers = [
-      {'name': 'Beginner', 'stake': 50, 'color': Colors.green},
-      {'name': 'Easy', 'stake': 100, 'color': Colors.blue},
-      {'name': 'Normal', 'stake': 200, 'color': Colors.orange},
-      {'name': 'Hard', 'stake': 350, 'color': Colors.red},
-      {'name': 'Expert', 'stake': 500, 'color': Colors.purple},
-    ];
-
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: const Color(0xFF1E293B),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (context) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: 16.0,
-              vertical: 20.0,
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text(
-                  "Select Challenge Level",
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  "Both players stake entry coins. Winner takes the pool!",
-                  style: TextStyle(fontSize: 14, color: Colors.grey),
-                ),
-                const SizedBox(height: 16),
-                ...tiers.map((tier) {
-                  final name = tier['name'] as String;
-                  final stake = tier['stake'] as int;
-                  final color = tier['color'] as Color;
-
-                  return Card(
-                    color: const Color(0xFF334155),
-                    margin: const EdgeInsets.symmetric(vertical: 6),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: ListTile(
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 20,
-                        vertical: 4,
-                      ),
-                      leading: Icon(Icons.shield, color: color, size: 30),
-                      title: Text(
-                        name,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                          fontSize: 18,
-                        ),
-                      ),
-                      subtitle: Text(
-                        "Stake: $stake coins  |  Pool: ${stake * 2} coins",
-                        style: TextStyle(color: Colors.grey[400]),
-                      ),
-                      trailing: const Icon(
-                        Icons.arrow_forward_ios,
-                        color: Colors.white54,
-                        size: 16,
-                      ),
-                      // Inside home_screen.dart -> _showLevelSelectionBottomSheet -> Card ListTile onTap:
-                      onTap: () {
-                        Navigator.pop(context); // Close selection sheet
-
-                        // Open Friends Screen, passing the chosen stakes configuration along
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => FriendsScreen(
-                              challengeLevel: name,
-                              challengeStake: stake,
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                  );
-                }),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -246,15 +146,9 @@ class HomeScreen extends StatelessWidget {
           ],
         ),
       ),
-      // 🟢 FIX: We use AlwaysScrollableScrollPhysics to force scrolling capability even on short screens
       body: ListView(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(
-          16,
-          16,
-          16,
-          40,
-        ), // Added bottom padding so content isn't clipped
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 40),
         children: [
           DashboardHeader(user: user),
           const SizedBox(height: 20),
@@ -286,50 +180,33 @@ class HomeScreen extends StatelessWidget {
             height: 160,
             child: ListView(
               scrollDirection: Axis.horizontal,
-              // 🟢 FIX: Added bouncing physics to the horizontal cards so they don't fight the vertical scroll container
-              physics: const BouncingScrollPhysics(),
+              // 🟢 FIX: Clamping scroll physics prevents horizontal items from freezing or fighting vertical gestures
+              physics: const ClampingScrollPhysics(),
               children: [
+                // Card 1: Direct link to full-page level selector
                 GameMenuCard(
-                  title: "New Game",
+                  title: "Play 1vs1",
                   icon: Icons.sports_soccer,
                   onTap: () {
-                    showModalBottomSheet(
-                      context: context,
-                      shape: const RoundedRectangleBorder(
-                        borderRadius: BorderRadius.vertical(
-                          top: Radius.circular(20),
-                        ),
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const LevelSelectionScreen(),
                       ),
-                      builder: (context) {
-                        return SafeArea(
-                          child: Wrap(
-                            children: [
-                              ListTile(
-                                leading: const Icon(Icons.person),
-                                title: const Text("Play 1 vs 1 (Online)"),
-                                onTap: () {
-                                  Navigator.pop(context);
-                                  _showLevelSelectionBottomSheet(context);
-                                },
-                              ),
-                              ListTile(
-                                leading: const Icon(Icons.smart_toy),
-                                title: const Text("Challenge AI"),
-                                onTap: () {
-                                  Navigator.pop(context);
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (_) =>
-                                          const AiGuessPlayerScreen(),
-                                    ),
-                                  );
-                                },
-                              ),
-                            ],
-                          ),
-                        );
-                      },
+                    );
+                  },
+                ),
+                // Card 2: AI option broken out into its own explicit card
+                GameMenuCard(
+                  title: "Challenge AI",
+                  icon: Icons.smart_toy,
+                  onTap: () {
+                    // 🟢 FIX: Route directly to the standalone AI Level page first!
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const AiLevelSelectionScreen(),
+                      ),
                     );
                   },
                 ),
